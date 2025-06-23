@@ -1,0 +1,289 @@
+{
+  "check_interval": 20,
+  "concurrent_workers": 5,
+  "news_sites": [
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": ".timestamp",
+      "enabled": true,
+      "name": "IMF",
+      "site_type": "rss",
+      "title_selector": ".container__headline-text",
+      "url": "https://www.imf.org/en/Publications/RSS?language=eng&series=IMF%20Working%20Papers"
+    },
+    {
+      "date_format": "%B %-d, %Y",
+      "date_selector": "div.search-listing-content > div > span:nth-child(3)",
+      "enabled": true,
+      "name": "世界银行",
+      "site_type": "html",
+      "title_selector": "div.search-listing-content > h3 > a.ng-tns-c0-0",
+      "url": "https://documents.worldbank.org/en/publication/documents-reports/documentlist?docty_exact=Policy%2BResearch%2BWorking%2BPaper"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "国际清算银行-Papers",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.bis.org/doclist/bispapers.rss"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "国际清算银行-Working papers",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.bis.org/doclist/wppubls.rss"
+    },
+    {
+      "date_format": "%d %b %Y",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "亚洲开发银行",
+      "site_type": "html",
+      "title_selector": "li.clearfix > a",
+      "url": "https://www.adb.org/publications/series/economics-working-papers"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "span.eyd-card-publication__date > span.eyd-card-publication__meta__text",
+      "enabled": true,
+      "name": "亚太经合组织",
+      "site_type": "html",
+      "title_selector": "div.eyd-card-publication__text > h3",
+      "url": "https://www.apec.org/publications/listings?keyword=&publicationTitle=&publicationNumber=&group=&publicationType=&dateFrom=&dateTo=&page=1"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "美联储-feds",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.federalreserve.gov/feeds/feds.xml"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "美联储-feds_notes",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.federalreserve.gov/feeds/feds_notes.xml"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "美联储-feds_notes",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.federalreserve.gov/feeds/ifdp.xml"
+    },
+    {
+      "date_format": "%B %-d, %Y",
+      "date_selector": "span.date",
+      "enabled": true,
+      "name": "Hoover",
+      "site_type": "html",
+      "title_selector": "div > div.content > h6",
+      "url": "https://www.hoover.org/research/type/working-papers"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "dt > div.date",
+      "enabled": true,
+      "name": "欧洲央行",
+      "site_type": "html",
+      "title_selector": "div.title > a",
+      "url": "https://www.ecb.europa.eu/press/research-publications/working-papers/html/index.en.html"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "p.date",
+      "enabled": true,
+      "name": "美国布鲁金斯学会",
+      "site_type": "html",
+      "title_selector": "article > a > span",
+      "url": "https://www.brookings.edu/programs/economic-studies/explore-research-and-commentary/"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.digest-card__date > span:nth-child(1)",
+      "enabled": true,
+      "name": "美国经济研究局",
+      "site_type": "html",
+      "title_selector": "div.digest-card__title > a",
+      "url": "https://www.nber.org/papers?page=1&perPage=50&sortBy=public_date"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "p.teaser__date > time",
+      "enabled": false,
+      "name": "彼得森研究所（PIIE）",
+      "site_type": "html",
+      "title_selector": "h2.teaser__title > a",
+      "url": "https://www.piie.com/publications/working-papers"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.c-horizontal-card__meta > div.c-horizontal-card__date > div > time",
+      "enabled": true,
+      "name": "哈德逊研究所",
+      "site_type": "html",
+      "title_selector": "a.c-horizontal-card__title > span",
+      "url": "https://www.hudson.org/search?hud-content-type=258&expert=&date-from=&date-to=&keywords=&topics=All&region=All"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "p.c-list-item__date",
+      "enabled": true,
+      "name": "布鲁盖尔研究所",
+      "site_type": "html",
+      "title_selector": "h2.c-list-item__title > a > span",
+      "url": "https://www.bruegel.org/publications/working-papers"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.card-body.py-4.px-5.d-flex.flex-column > small",
+      "enabled": true,
+      "name": "法国央行",
+      "site_type": "html",
+      "title_selector": "span.title-truncation",
+      "url": "https://www.banque-france.fr/en/publications-and-statistics/publications"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "tbody > tr > td:nth-child(2)",
+      "enabled": true,
+      "name": "日本央行",
+      "site_type": "html",
+      "title_selector": "tbody > tr > td:nth-child(4)",
+      "url": "https://www.boj.or.jp/en/research/wps_rev/index.htm"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "加拿大央行",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.bankofcanada.ca/feed/?content_type=working-papers&post_type%5B0%5D=post&post_type%5B1%5D=page"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "美国企业研究所",
+      "site_type": "rss",
+      "title_selector": "h3[data-testid=",
+      "url": "https://www.aei.org/feed/"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.post-date > span",
+      "enabled": true,
+      "name": "金融稳定委员会（FSB）",
+      "site_type": "html",
+      "title_selector": "div.post-title > h3 > a",
+      "url": "https://www.fsb.org/publications/"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "article > div.search-result-list-item__meta > span.search-result-list-item__date",
+      "enabled": true,
+      "name": "经济合作与发展组织（OECD）",
+      "site_type": "html",
+      "title_selector": "article > div.search-result-list-item__title > a",
+      "url": "https://www.oecd.org/en/publications/reports.html?orderBy=mostRelevant&page=0"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.publisheddate > time",
+      "enabled": false,
+      "name": "联合国贸易和发展会议（UNCTAD）",
+      "site_type": "html",
+      "title_selector": "div.title > a",
+      "url": "https://unctad.org/publications-search?f%5B0%5D=product%3A389"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "香港金融学院（HKIMR）",
+      "site_type": "html",
+      "title_selector": "div.mbm.papertitle",
+      "url": "https://www.aof.org.hk/research/HKIMR/publications-and-research/working-papers"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.hbs-article-tease__meta > div > p > time",
+      "enabled": true,
+      "name": "哈佛商学院",
+      "site_type": "html",
+      "title_selector": "h2.hbs-article-tease__title hbs-text-h2 > a",
+      "url": "https://www.library.hbs.edu/working-knowledge/collections/finance-and-investing"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "span.article--date > time",
+      "enabled": true,
+      "name": "国际金融协会（IIF）-Debt",
+      "site_type": "html",
+      "title_selector": "h4.article--title > a",
+      "url": "https://www.iif.com/Key-Topics/Debt"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "span.article--date > time",
+      "enabled": true,
+      "name": "国际金融协会（IIF）-Sustainable-Finance",
+      "site_type": "html",
+      "title_selector": "h4.article--title > a",
+      "url": "https://www.iif.com/Key-Topics/Sustainable-Finance"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "span.article--date > time",
+      "enabled": true,
+      "name": "国际金融协会（IIF）-Digital-Finance",
+      "site_type": "html",
+      "title_selector": "h4.article--title > a",
+      "url": "https://www.iif.com/Key-Topics/Digital-Finance"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "time",
+      "enabled": true,
+      "name": "牛津经济研究院",
+      "site_type": "html",
+      "title_selector": "div.wpgb-card-body > div > div > h3 > a",
+      "url": "https://www.oxfordeconomics.com/resource-hub/"
+    },
+    {
+      "date_format": "%Y-%m-%d",
+      "date_selector": "div.card-content > div > span.date",
+      "enabled": true,
+      "name": "穆迪",
+      "site_type": "html",
+      "title_selector": "div.card-content > h3 > a",
+      "url": "https://www.moodys.com/web/en/us/insights.html"
+    }
+  ],
+  "notification": {
+    "bark_url": "https://api.day.app/yoFTAeEN4fV66DqhvJkxZ6",
+    "bark_urls": [
+      "https://api.day.app/yoFTAeEN4fV66DqhvJkxZ6"
+    ],
+    "serverchan_key": "",
+    "serverchan_keys": []
+  },
+  "translation": {
+    "api_key": "",
+    "api_url": "https://api.deeplx.org/dxkM2AGEnEjqCh3XZzicAU1g8xfQ3yaPpa7e-T7LHKE/translate",
+    "enabled": true
+  }
+}
