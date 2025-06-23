@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block title %}日志 - 新闻监控系统{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-4 mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="bi bi-journal-text text-primary me-2"></i>
+                系统日志
+            </h1>
+            <p class="text-muted mb-0">实时监控系统运行状态和错误信息</p>
+        </div>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <div class="btn-group me-2">
+                <button type="button" class="btn btn-outline-primary" onclick="refreshLogs()">
+                    <i class="bi bi-arrow-repeat"></i> 刷新
+                </button>
+                <button type="button" class="btn btn-outline-warning" onclick="clearLogs()">
+                    <i class="bi bi-trash"></i> 清空显示
+                </button>
+                <button type="button" class="btn btn-outline-success" onclick="toggleAutoRefresh()">
+                    <i class="bi bi-play-circle" id="auto-refresh-icon"></i>
+                    <span id="auto-refresh-text">开启自动刷新</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志统计 -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center fade-in" style="animation-delay: 0.1s">
+            <div class="card-body">
+                <div class="mb-2">
+                    <i class="bi bi-info-circle text-info" style="font-size: 2rem;"></i>
+                </div>
+                <h5 class="card-title text-info mb-1">INFO</h5>
+                <h3 id="info-count" class="card-text text-info mb-0">0</h3>
+                <small class="text-muted">信息日志</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center fade-in" style="animation-delay: 0.2s">
+            <div class="card-body">
+                <div class="mb-2">
+                    <i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i>
+                </div>
+                <h5 class="card-title text-warning mb-1">WARNING</h5>
+                <h3 id="warning-count" class="card-text text-warning mb-0">0</h3>
+                <small class="text-muted">警告日志</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center fade-in" style="animation-delay: 0.3s">
+            <div class="card-body">
+                <div class="mb-2">
+                    <i class="bi bi-x-circle text-danger" style="font-size: 2rem;"></i>
+                </div>
+                <h5 class="card-title text-danger mb-1">ERROR</h5>
+                <h3 id="error-count" class="card-text text-danger mb-0">0</h3>
+                <small class="text-muted">错误日志</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center fade-in" style="animation-delay: 0.4s">
+            <div class="card-body">
+                <div class="mb-2">
+                    <i class="bi bi-list-ul text-secondary" style="font-size: 2rem;"></i>
+                </div>
+                <h5 class="card-title text-secondary mb-1">总计</h5>
+                <h3 id="total-count" class="card-text mb-0">0</h3>
+                <small class="text-muted">全部日志</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志过滤 -->
+<div class="card mb-4 fade-in" style="animation-delay: 0.5s">
+    <div class="card-header bg-light">
+        <h6 class="mb-0">
+            <i class="bi bi-funnel text-primary me-2"></i>
+            日志过滤
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label for="log-level-filter" class="form-label fw-semibold">
+                    <i class="bi bi-layers text-info me-1"></i>
+                    日志级别
+                </label>
+                <select class="form-select" id="log-level-filter" onchange="filterLogs()">
+                    <option value="all">全部</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="log-search" class="form-label fw-semibold">
+                    <i class="bi bi-search text-primary me-1"></i>
+                    搜索关键词
+                </label>
+                <input type="text" class="form-control" id="log-search" placeholder="输入关键词搜索日志..." onkeyup="filterLogs()">
+            </div>
+            <div class="col-md-3">
+                <button type="button" class="btn btn-outline-success w-100" onclick="exportLogs()">
+                    <i class="bi bi-download"></i> 导出日志
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 日志显示区域 -->
+<div class="card fade-in" style="animation-delay: 0.6s">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="bi bi-terminal text-success me-2"></i>
+            实时日志
+        </h5>
+        <div class="d-flex align-items-center">
+            <div class="me-3">
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">
+                    <i class="bi bi-circle-fill" style="font-size: 0.5rem;"></i>
+                    实时监控
+                </span>
+            </div>
+            <small class="text-muted">
+                <i class="bi bi-clock"></i>
+                最后更新: <span id="last-update">-</span>
+            </small>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div id="log-container" class="log-container p-3">
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">加载中...</span>
+                </div>
+                <p class="mt-2 text-light">正在加载日志...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allLogs = [];
+    let filteredLogs = [];
+    let autoRefreshInterval = null;
+    let isAutoRefresh = false;
+    
+    // 刷新日志
+    function refreshLogs() {
+        fetch('/api/logs')
+            .then(response => response.json())
+            .then(data => {
+                allLogs = data.logs || [];
+                filterLogs();
+                updateLastUpdateTime();
+                updateLogStatistics();
+            })
+            .catch(error => {
+                const container = document.getElementById('log-container');
+                container.innerHTML = `
+                    <div class="text-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 加载日志失败: ${error.message}
+                    </div>
+                `;
+            });
+    }
+    
+    // 过滤日志
+    function filterLogs() {
+        const levelFilter = document.getElementById('log-level-filter').value;
+        const searchText = document.getElementById('log-search').value.toLowerCase();
+        
+        filteredLogs = allLogs.filter(log => {
+            // 级别过滤
+            if (levelFilter !== 'all' && !log.includes(levelFilter)) {
+                return false;
+            }
+            
+            // 关键词搜索
+            if (searchText && !log.toLowerCase().includes(searchText)) {
+                return false;
+            }
+            
+            return true;
+        });
+        
+        displayLogs();
+    }
+    
+    // 显示日志
+    function displayLogs() {
+        const container = document.getElementById('log-container');
+        
+        if (filteredLogs.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-file-text" style="font-size: 3rem;"></i>
+                    <p class="mt-2">没有找到匹配的日志</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        filteredLogs.reverse().forEach(log => {
+            const logClass = getLogClass(log);
+            const logIcon = getLogIcon(log);
+            
+            html += `
+                <div class="log-line ${logClass} mb-1 p-2 rounded">
+                    <i class="${logIcon} me-2"></i>
+                    <span class="log-text">${escapeHtml(log.trim())}</span>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+        
+        // 滚动到底部
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    // 获取日志样式类
+    function getLogClass(log) {
+        if (log.includes('ERROR')) return 'text-danger';
+        if (log.includes('WARNING')) return 'text-warning';
+        if (log.includes('INFO')) return 'text-info';
+        return 'text-light';
+    }
+    
+    // 获取日志图标
+    function getLogIcon(log) {
+        if (log.includes('ERROR')) return 'bi bi-exclamation-triangle-fill';
+        if (log.includes('WARNING')) return 'bi bi-exclamation-triangle';
+        if (log.includes('INFO')) return 'bi bi-info-circle';
+        return 'bi bi-circle';
+    }
+    
+    // 更新日志统计
+    function updateLogStatistics() {
+        let infoCount = 0;
+        let warningCount = 0;
+        let errorCount = 0;
+        
+        allLogs.forEach(log => {
+            if (log.includes('INFO')) infoCount++;
+            else if (log.includes('WARNING')) warningCount++;
+            else if (log.includes('ERROR')) errorCount++;
+        });
+        
+        document.getElementById('info-count').textContent = infoCount;
+        document.getElementById('warning-count').textContent = warningCount;
+        document.getElementById('error-count').textContent = errorCount;
+        document.getElementById('total-count').textContent = allLogs.length;
+    }
+    
+    // 更新最后更新时间
+    function updateLastUpdateTime() {
+        const now = new Date().toLocaleString('zh-CN');
+        document.getElementById('last-update').textContent = now;
+    }
+    
+    // 清空显示
+    function clearLogs() {
+        if (confirm('确定要清空当前显示的日志吗？（不会删除日志文件）')) {
+            allLogs = [];
+            filteredLogs = [];
+            displayLogs();
+            updateLogStatistics();
+        }
+    }
+    
+    // 切换自动刷新
+    function toggleAutoRefresh() {
+        const icon = document.getElementById('auto-refresh-icon');
+        const text = document.getElementById('auto-refresh-text');
+        
+        if (isAutoRefresh) {
+            // 停止自动刷新
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+            isAutoRefresh = false;
+            icon.className = 'bi bi-play-circle';
+            text.textContent = '开启自动刷新';
+        } else {
+            // 开始自动刷新
+            autoRefreshInterval = setInterval(refreshLogs, 3000); // 每3秒刷新
+            isAutoRefresh = true;
+            icon.className = 'bi bi-pause-circle';
+            text.textContent = '停止自动刷新';
+        }
+    }
+    
+    // 导出日志
+    function exportLogs() {
+        if (filteredLogs.length === 0) {
+            alert('没有日志可以导出');
+            return;
+        }
+        
+        const logContent = filteredLogs.join('\n');
+        const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `news_monitor_logs_${new Date().toISOString().split('T')[0]}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    // HTML转义
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // 页面加载时获取日志
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshLogs();
+    });
+    
+    // 页面卸载时清理定时器
+    window.addEventListener('beforeunload', function() {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+    });
+</script>
+
+<style>
+    .log-line {
+        font-family: 'Courier New', monospace;
+        font-size: 0.9em;
+        border-left: 3px solid transparent;
+        transition: all 0.2s ease;
+    }
+    
+    .log-line:hover {
+        background-color: rgba(255, 255, 255, 0.1) !important;
+    }
+    
+    .log-line.text-danger {
+        border-left-color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.1);
+    }
+    
+    .log-line.text-warning {
+        border-left-color: #ffc107;
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+    
+    .log-line.text-info {
+        border-left-color: #0dcaf0;
+        background-color: rgba(13, 202, 240, 0.1);
+    }
+    
+    .log-container {
+        max-height: 600px;
+        overflow-y: auto;
+        background-color: #1a1a1a;
+        border-radius: 0.375rem;
+    }
+    
+    .log-container::-webkit-scrollbar {
+        width: 8px;
+    }
+    
+    .log-container::-webkit-scrollbar-track {
+        background: #2a2a2a;
+        border-radius: 4px;
+    }
+    
+    .log-container::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 4px;
+    }
+    
+    .log-container::-webkit-scrollbar-thumb:hover {
+        background: #777;
+    }
+</style>
+{% endblock %}

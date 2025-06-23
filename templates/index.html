@@ -1,0 +1,309 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 新闻监控系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-4 mb-4">
+    <div class="fade-in">
+        <h1 class="h2 mb-1"><i class="bi bi-newspaper text-primary"></i> 新闻监控系统</h1>
+        <p class="text-muted mb-0">实时监控新闻动态</p>
+    </div>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-primary" onclick="checkNow()">
+                <i class="bi bi-arrow-clockwise"></i> 立即检查
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="refreshNews()">
+                <i class="bi bi-arrow-repeat"></i> 刷新
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 统计信息 -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.1s">
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <i class="bi bi-collection text-primary" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-primary mb-2">总新闻数</h5>
+                <h2 id="total-news" class="card-text fw-bold">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.2s">
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <i class="bi bi-plus-circle text-success" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-success mb-2">今日新增</h5>
+                <h2 id="today-news" class="card-text fw-bold">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.3s">
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <i class="bi bi-globe text-info" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-info mb-2">监控网站</h5>
+                <h2 id="active-sites" class="card-text fw-bold">-</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.4s">
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <i class="bi bi-clock text-warning" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-warning mb-2">最后检查</h5>
+                <h2 id="last-check" class="card-text fw-bold">-</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 新闻列表 -->
+<div class="card fade-in" style="animation-delay: 0.5s">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="bi bi-list-ul text-primary"></i> 最新新闻
+            </h5>
+            <div class="d-flex align-items-center">
+                <small class="text-muted me-2">自动刷新</small>
+                <div class="spinner-border spinner-border-sm text-primary" role="status" id="refresh-spinner" style="display: none;">
+                    <span class="visually-hidden">刷新中...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="news-container">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">加载中...</span>
+                </div>
+                <p class="mt-3 text-muted">正在加载新闻数据...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作结果提示 -->
+<div id="alert-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let newsData = [];
+    
+    // 显示提示信息
+    function showAlert(message, type = 'info') {
+        const alertContainer = document.getElementById('alert-container');
+        const alertId = 'alert-' + Date.now();
+        
+        const alertHtml = `
+            <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show mt-3" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        alertContainer.insertAdjacentHTML('beforeend', alertHtml);
+        
+        // 3秒后自动消失
+        setTimeout(() => {
+            const alert = document.getElementById(alertId);
+            if (alert) {
+                alert.remove();
+            }
+        }, 3000);
+    }
+    
+    // 立即检查新闻
+    function checkNow() {
+        showAlert('开始检查新闻更新...', 'info');
+        
+        fetch('/api/check_now')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    // 延迟刷新新闻列表
+                    setTimeout(refreshNews, 2000);
+                } else {
+                    showAlert(data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('检查失败: ' + error.message, 'danger');
+            });
+    }
+    
+    // 刷新新闻列表
+    function refreshNews() {
+        const container = document.getElementById('news-container');
+        const refreshSpinner = document.getElementById('refresh-spinner');
+        
+        // 显示刷新指示器
+        if (refreshSpinner) {
+            refreshSpinner.style.display = 'block';
+        }
+        
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">加载中...</span>
+                </div>
+                <p class="mt-3 text-muted">正在加载新闻数据...</p>
+            </div>
+        `;
+        
+        fetch('/api/news')
+            .then(response => response.json())
+            .then(data => {
+                newsData = data;
+                displayNews(data);
+                updateStatistics(data);
+            })
+            .catch(error => {
+                container.innerHTML = `
+                    <div class="alert alert-danger fade-in" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill"></i> 加载新闻失败: ${error.message}
+                        <button class="btn btn-outline-danger btn-sm ms-2" onclick="refreshNews()">重试</button>
+                    </div>
+                `;
+            })
+            .finally(() => {
+                // 隐藏刷新指示器
+                if (refreshSpinner) {
+                    refreshSpinner.style.display = 'none';
+                }
+            });
+    }
+    
+    // 显示新闻列表
+    function displayNews(news) {
+        const container = document.getElementById('news-container');
+        
+        if (news.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-5 fade-in">
+                    <div class="mb-4">
+                        <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+                    </div>
+                    <h5 class="text-muted mb-3">暂无新闻数据</h5>
+                    <p class="text-muted mb-4">点击下方按钮开始检查新闻更新</p>
+                    <button class="btn btn-primary btn-lg" onclick="checkNow()">
+                        <i class="bi bi-arrow-clockwise"></i> 立即检查
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '';
+        news.forEach((item, index) => {
+            // 为数据库时间加8小时
+            const dbDate = new Date(item.created_at);
+            dbDate.setHours(dbDate.getHours() + 8);
+            const date = dbDate.toLocaleString('zh-CN');
+            const hasUrl = item.url && item.url.trim() !== '';
+            const animationDelay = (index * 0.1).toFixed(1);
+            
+            html += `
+                <div class="news-item fade-in" style="animation-delay: ${animationDelay}s">
+                    <div class="d-flex align-items-start">
+                        <div class="flex-shrink-0 me-3">
+                            <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                <i class="bi bi-newspaper text-white"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                    <i class="bi bi-globe2"></i> ${escapeHtml(item.site_name)}
+                                </span>
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> ${date}
+                                </small>
+                            </div>
+                            <h6 class="news-title mb-2">
+                                ${hasUrl ? `<a href="${item.url}" target="_blank" class="text-decoration-none text-dark">` : ''}
+                                ${escapeHtml(item.title)}
+                                ${hasUrl ? `<i class="bi bi-box-arrow-up-right ms-1 text-primary"></i></a>` : ''}
+                            </h6>
+                            ${item.translated_title && item.translated_title !== item.title ? 
+                                `<p class="news-translated mb-2"><i class="bi bi-translate text-info"></i> ${escapeHtml(item.translated_title)}</p>` : ''}
+                            <div class="news-meta">
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar3"></i> 发布时间: ${item.date}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // 更新统计信息
+    function updateStatistics(news) {
+        const totalNews = news.length;
+        const today = new Date().toISOString().split('T')[0];
+        const todayNews = news.filter(item => {
+            if (!item.created_at) return false;
+            // 为数据库时间加8小时后再比较日期
+            const dbDate = new Date(item.created_at);
+            dbDate.setHours(dbDate.getHours() + 8);
+            return dbDate.toISOString().split('T')[0] === today;
+        }).length;
+        
+        // 获取配置信息来计算活跃网站数
+        fetch('/api/config')
+            .then(response => response.json())
+            .then(config => {
+                const activeSites = config.news_sites.filter(site => site.enabled).length;
+                document.getElementById('active-sites').textContent = activeSites;
+            })
+            .catch(() => {
+                document.getElementById('active-sites').textContent = '-';
+            });
+        
+        document.getElementById('total-news').textContent = totalNews;
+        document.getElementById('today-news').textContent = todayNews;
+        
+        // 最后检查时间（使用最新新闻的时间）
+        if (news.length > 0) {
+            // 为数据库时间加8小时
+            const dbDate = new Date(news[0].created_at);
+            dbDate.setHours(dbDate.getHours() + 8);
+            const lastCheck = dbDate.toLocaleString('zh-CN');
+            document.getElementById('last-check').textContent = lastCheck;
+        }
+    }
+    
+    // HTML转义
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // 页面加载时获取新闻
+    document.addEventListener('DOMContentLoaded', function() {
+        refreshNews();
+    });
+    
+    // 每30秒自动刷新
+    setInterval(refreshNews, 30000);
+</script>
+{% endblock %}

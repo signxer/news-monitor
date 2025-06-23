@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% block title %}配置 - 新闻监控系统{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-4 mb-4">
+        <div>
+            <h1 class="h2 mb-1">
+                <i class="bi bi-gear-fill text-primary me-2"></i>
+                系统配置
+            </h1>
+            <p class="text-muted mb-0">管理新闻监控系统的各项设置</p>
+        </div>
+        <div class="btn-toolbar mb-2 mb-md-0">
+            <button type="button" class="btn btn-success btn-lg" onclick="saveConfig()">
+                <i class="bi bi-check-lg"></i> 保存配置
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <!-- 基本设置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.1s">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-gear text-primary me-2"></i>
+                    基本设置
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="check-interval" class="form-label fw-semibold">
+                                <i class="bi bi-clock text-info me-1"></i>
+                                检查间隔（分钟）
+                            </label>
+                            <input type="number" class="form-control" id="check-interval" min="1" max="1440" value="{{ config.check_interval }}">
+                            <div class="form-text">设置自动检查新闻的时间间隔</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 通知设置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.2s">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-bell text-warning me-2"></i>
+                    通知设置
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-semibold mb-0">
+                                    <i class="bi bi-phone text-success me-1"></i>
+                                    Bark通知URL
+                                </label>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="addBarkUrl()">
+                                    <i class="bi bi-plus"></i> 添加
+                                </button>
+                            </div>
+                            <div id="bark-urls-container">
+                                <!-- Bark URLs will be dynamically added here -->
+                            </div>
+                            <div class="form-text">Bark推送服务的完整URL，支持配置多个地址</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-semibold mb-0">
+                                    <i class="bi bi-wechat text-success me-1"></i>
+                                    Server酱密钥
+                                </label>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="addServerchanKey()">
+                                    <i class="bi bi-plus"></i> 添加
+                                </button>
+                            </div>
+                            <div id="serverchan-keys-container">
+                                <!-- Server酱 keys will be dynamically added here -->
+                            </div>
+                            <div class="form-text">Server酱推送服务的密钥，支持配置多个密钥</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 翻译设置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.3s">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-translate text-info me-2"></i>
+                    翻译设置
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="translation-enabled" {{ 'checked' if config.translation.enabled }}>
+                        <label class="form-check-label fw-semibold" for="translation-enabled">
+                            <i class="bi bi-translate text-success me-1"></i>
+                            启用标题翻译
+                        </label>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="translation-api-url" class="form-label fw-semibold">
+                                <i class="bi bi-link-45deg text-primary me-1"></i>
+                                翻译API地址
+                            </label>
+                            <input type="url" class="form-control" id="translation-api-url" placeholder="https://fanyi-api.baidu.com/api/trans/vip/translate" value="{{ config.translation.api_url }}">
+                            <div class="form-text">翻译服务的API地址</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="translation-api-key" class="form-label fw-semibold">
+                                <i class="bi bi-key text-warning me-1"></i>
+                                API密钥
+                            </label>
+                            <input type="text" class="form-control" id="translation-api-key" placeholder="your_api_key" value="{{ config.translation.api_key }}">
+                            <div class="form-text">翻译服务的API密钥</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 新闻网站配置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.4s">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-globe text-success me-2"></i>
+                    新闻网站配置
+                </h5>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addNewsSite()">
+                    <i class="bi bi-plus-circle"></i> 添加网站
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="news-sites-container">
+                    <!-- 新闻网站列表将在这里动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 操作结果提示 -->
+<div id="alert-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 确保config变量正确定义
+    let config;
+    try {
+        config = {{ config | tojson | safe }};
+        console.log('Config loaded:', config);
+    } catch (e) {
+        console.error('Failed to load config:', e);
+        config = {
+            check_interval: 60,
+            notification: { bark_url: '', serverchan_key: '' },
+            translation: { api_key: '', api_url: '', enabled: false },
+            news_sites: []
+        };
+    }
+    
+    // 显示提示信息
+    function showAlert(message, type = 'info') {
+        const alertContainer = document.getElementById('alert-container');
+        const alertId = 'alert-' + Date.now();
+        
+        const alertHtml = `
+            <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show mt-3" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        
+        alertContainer.insertAdjacentHTML('beforeend', alertHtml);
+        
+        setTimeout(() => {
+            const alert = document.getElementById(alertId);
+            if (alert) {
+                alert.remove();
+            }
+        }, 3000);
+    }
+    
+    // 渲染新闻网站列表
+    function renderNewsSites() {
+        const container = document.getElementById('news-sites-container');
+        let html = '';
+        
+        // 确保config和news_sites存在
+        if (!config || !config.news_sites || !Array.isArray(config.news_sites)) {
+            console.error('Config or news_sites not available:', config);
+            container.innerHTML = '<div class="alert alert-warning">配置数据加载失败，请刷新页面重试。</div>';
+            return;
+        }
+        
+        config.news_sites.forEach((site, index) => {
+            html += `
+                <div class="card mb-3" id="site-${index}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="site-enabled-${index}" ${site.enabled ? 'checked' : ''}>
+                            <label class="form-check-label" for="site-enabled-${index}">
+                                <strong>${escapeHtml(site.name)}</strong>
+                            </label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNewsSite(${index})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">网站名称</label>
+                                    <input type="text" class="form-control" id="site-name-${index}" value="${escapeHtml(site.name)}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">网站URL</label>
+                                    <input type="url" class="form-control" id="site-url-${index}" value="${escapeHtml(site.url)}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">网站类型</label>
+                                    <select class="form-select" id="site-type-${index}" onchange="toggleSiteFields(${index})">
+                                        <option value="html" ${(site.site_type || 'html') === 'html' ? 'selected' : ''}>HTML网站</option>
+                                        <option value="rss" ${(site.site_type || 'html') === 'rss' ? 'selected' : ''}>RSS订阅</option>
+                                    </select>
+                                    <div class="form-text">选择网站类型：HTML网站需要配置选择器，RSS订阅会自动解析</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="html-fields-${index}" style="display: ${(site.site_type || 'html') === 'html' ? 'block' : 'none'}">
+                                <div class="mb-3">
+                                    <label class="form-label">标题选择器</label>
+                                    <input type="text" class="form-control" id="site-title-selector-${index}" value="${escapeHtml(site.title_selector || '')}">
+                                    <div class="form-text">CSS选择器，用于提取新闻标题</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">日期选择器（可选）</label>
+                                    <input type="text" class="form-control" id="site-date-selector-${index}" value="${escapeHtml(site.date_selector || '')}">
+                                    <div class="form-text">CSS选择器，用于提取发布日期</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="rss-info-${index}" style="display: ${(site.site_type || 'html') === 'rss' ? 'block' : 'none'}">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i>
+                                    <strong>RSS订阅说明：</strong><br>
+                                    RSS订阅会自动解析标题、链接和发布日期，无需配置选择器。<br>
+                                    请确保URL指向有效的RSS/XML订阅源。
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        
+        container.innerHTML = html;
+    }
+    
+    // 切换网站类型字段显示
+    function toggleSiteFields(index) {
+        const siteType = document.getElementById(`site-type-${index}`).value;
+        const htmlFields = document.getElementById(`html-fields-${index}`);
+        const rssInfo = document.getElementById(`rss-info-${index}`);
+        
+        if (siteType === 'rss') {
+            htmlFields.style.display = 'none';
+            rssInfo.style.display = 'block';
+        } else {
+            htmlFields.style.display = 'block';
+            rssInfo.style.display = 'none';
+        }
+    }
+    
+    // 添加新闻网站
+    function addNewsSite() {
+        const newSite = {
+            name: '新网站',
+            url: 'https://example.com',
+            site_type: 'html',
+            title_selector: 'h1, h2, h3',
+            date_selector: 'time',
+            date_format: '%Y-%m-%d',
+            enabled: true
+        };
+        
+        config.news_sites.push(newSite);
+        renderNewsSites();
+    }
+    
+    // 删除新闻网站
+    function removeNewsSite(index) {
+        if (confirm('确定要删除这个新闻网站配置吗？')) {
+            config.news_sites.splice(index, 1);
+            renderNewsSites();
+        }
+    }
+    
+    // 初始化通知配置UI
+    function initNotificationUI() {
+        // 确保配置结构存在
+        if (!config.notification.bark_urls) {
+            config.notification.bark_urls = [];
+        }
+        if (!config.notification.serverchan_keys) {
+            config.notification.serverchan_keys = [];
+        }
+        
+        // 向后兼容：将单个地址添加到数组中
+        if (config.notification.bark_url && !config.notification.bark_urls.includes(config.notification.bark_url)) {
+            config.notification.bark_urls.push(config.notification.bark_url);
+        }
+        if (config.notification.serverchan_key && !config.notification.serverchan_keys.includes(config.notification.serverchan_key)) {
+            config.notification.serverchan_keys.push(config.notification.serverchan_key);
+        }
+        
+        renderBarkUrls();
+        renderServerchanKeys();
+    }
+    
+    // 渲染Bark URL列表
+    function renderBarkUrls() {
+        const container = document.getElementById('bark-urls-container');
+        let html = '';
+        
+        config.notification.bark_urls.forEach((url, index) => {
+            html += `
+                <div class="input-group mb-2" id="bark-url-${index}">
+                    <input type="url" class="form-control" value="${escapeHtml(url)}" placeholder="https://api.day.app/your_key">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeBarkUrl(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+        
+        // 如果没有任何URL，显示一个空的输入框
+        if (config.notification.bark_urls.length === 0) {
+            html = `
+                <div class="input-group mb-2" id="bark-url-0">
+                    <input type="url" class="form-control" value="" placeholder="https://api.day.app/your_key">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeBarkUrl(0)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    // 渲染Server酱密钥列表
+    function renderServerchanKeys() {
+        const container = document.getElementById('serverchan-keys-container');
+        let html = '';
+        
+        config.notification.serverchan_keys.forEach((key, index) => {
+            html += `
+                <div class="input-group mb-2" id="serverchan-key-${index}">
+                    <input type="text" class="form-control" value="${escapeHtml(key)}" placeholder="SCT123456">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeServerchanKey(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+        
+        // 如果没有任何密钥，显示一个空的输入框
+        if (config.notification.serverchan_keys.length === 0) {
+            html = `
+                <div class="input-group mb-2" id="serverchan-key-0">
+                    <input type="text" class="form-control" value="" placeholder="SCT123456">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeServerchanKey(0)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    // 添加Bark URL
+    function addBarkUrl() {
+        config.notification.bark_urls.push('');
+        renderBarkUrls();
+    }
+    
+    // 删除Bark URL
+    function removeBarkUrl(index) {
+        if (config.notification.bark_urls.length > 1) {
+            config.notification.bark_urls.splice(index, 1);
+        } else {
+            config.notification.bark_urls[0] = '';
+        }
+        renderBarkUrls();
+    }
+    
+    // 添加Server酱密钥
+    function addServerchanKey() {
+        config.notification.serverchan_keys.push('');
+        renderServerchanKeys();
+    }
+    
+    // 删除Server酱密钥
+    function removeServerchanKey(index) {
+        if (config.notification.serverchan_keys.length > 1) {
+            config.notification.serverchan_keys.splice(index, 1);
+        } else {
+            config.notification.serverchan_keys[0] = '';
+        }
+        renderServerchanKeys();
+    }
+    
+    // 收集表单数据
+    function collectFormData() {
+        // 基本设置
+        config.check_interval = parseInt(document.getElementById('check-interval').value);
+        
+        // 收集Bark URLs
+        config.notification.bark_urls = [];
+        const barkContainer = document.getElementById('bark-urls-container');
+        const barkInputs = barkContainer.querySelectorAll('input[type="url"]');
+        barkInputs.forEach(input => {
+            const url = input.value.trim();
+            if (url) {
+                config.notification.bark_urls.push(url);
+            }
+        });
+        
+        // 收集Server酱密钥
+        config.notification.serverchan_keys = [];
+        const serverchanContainer = document.getElementById('serverchan-keys-container');
+        const serverchanInputs = serverchanContainer.querySelectorAll('input[type="text"]');
+        serverchanInputs.forEach(input => {
+            const key = input.value.trim();
+            if (key) {
+                config.notification.serverchan_keys.push(key);
+            }
+        });
+        
+        // 向后兼容：设置第一个地址为单个配置
+        config.notification.bark_url = config.notification.bark_urls.length > 0 ? config.notification.bark_urls[0] : '';
+        config.notification.serverchan_key = config.notification.serverchan_keys.length > 0 ? config.notification.serverchan_keys[0] : '';
+        
+        // 翻译设置
+        config.translation.enabled = document.getElementById('translation-enabled').checked;
+        config.translation.api_url = document.getElementById('translation-api-url').value.trim();
+        config.translation.api_key = document.getElementById('translation-api-key').value.trim();
+        
+        // 新闻网站设置
+        config.news_sites.forEach((site, index) => {
+            const enabledEl = document.getElementById(`site-enabled-${index}`);
+            const nameEl = document.getElementById(`site-name-${index}`);
+            const urlEl = document.getElementById(`site-url-${index}`);
+            const siteTypeEl = document.getElementById(`site-type-${index}`);
+            const titleSelectorEl = document.getElementById(`site-title-selector-${index}`);
+            const dateSelectorEl = document.getElementById(`site-date-selector-${index}`);
+            
+            if (enabledEl) site.enabled = enabledEl.checked;
+            if (nameEl) site.name = nameEl.value.trim();
+            if (urlEl) site.url = urlEl.value.trim();
+            if (siteTypeEl) site.site_type = siteTypeEl.value;
+            if (titleSelectorEl) site.title_selector = titleSelectorEl.value.trim();
+            if (dateSelectorEl) site.date_selector = dateSelectorEl.value.trim();
+        });
+    }
+    
+    // 保存配置
+    function saveConfig() {
+        try {
+            collectFormData();
+            
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(config)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert('配置保存成功！', 'success');
+                } else {
+                    showAlert('保存失败: ' + data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('保存失败: ' + error.message, 'danger');
+            });
+        } catch (error) {
+            showAlert('配置数据错误: ' + error.message, 'danger');
+        }
+    }
+    
+    // HTML转义
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', function() {
+        initNotificationUI();
+        renderNewsSites();
+    });
+    
+    // 键盘快捷键保存
+    document.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            saveConfig();
+        }
+    });
+</script>
+{% endblock %}
