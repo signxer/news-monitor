@@ -45,6 +45,7 @@ class NewsMonitor:
         self.config = self.load_config()
         self.driver_path = None
         self.is_running = False
+        self.last_check_time = None
         self.init_database()
         # 在服务启动时检查ChromeDriver
         self.init_chromedriver()
@@ -1010,6 +1011,7 @@ class NewsMonitor:
             return
         
         self.is_running = True
+        self.last_check_time = datetime.now()
         try:
             # 清理日志文件
             self.clean_log_file()
@@ -1058,6 +1060,9 @@ class NewsMonitor:
     
     def start_scheduler(self):
         """启动定时任务"""
+        # 设置初始的last_check_time为当前时间，这样倒计时就会从完整的间隔开始
+        self.last_check_time = datetime.now()
+        
         schedule.every(self.config['check_interval']).minutes.do(self.check_news_updates)
         
         def run_scheduler():
@@ -1165,10 +1170,21 @@ def api_logs():
 
 @app.route('/api/status')
 def api_status():
+    # 计算下次检查时间
+    next_check_time = None
+    if hasattr(monitor, 'last_check_time') and monitor.last_check_time:
+        next_check_time = monitor.last_check_time + timedelta(minutes=monitor.config['check_interval'])
+    else:
+        # 如果没有上次检查时间，使用当前时间加上检查间隔
+        next_check_time = datetime.now() + timedelta(minutes=monitor.config['check_interval'])
+    
     return jsonify({
         'is_running': monitor.is_running,
         'driver_available': monitor.driver_path is not None and os.path.exists(monitor.driver_path) if monitor.driver_path else False,
-        'config_loaded': monitor.config is not None
+        'config_loaded': monitor.config is not None,
+        'check_interval': monitor.config['check_interval'],
+        'next_check_time': next_check_time.isoformat() if next_check_time else None,
+        'last_check_time': monitor.last_check_time.isoformat() if hasattr(monitor, 'last_check_time') and monitor.last_check_time else None
     })
 
 @app.route('/api/test_notification', methods=['POST'])

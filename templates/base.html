@@ -338,15 +338,15 @@
                     
                     if (data.is_running) {
                         indicator.className = 'status-indicator status-running';
-                        text.textContent = '运行中';
+                        text.textContent = '采集中';
                     } else {
                         indicator.className = 'status-indicator status-stopped';
-                        text.textContent = '已停止';
+                        text.textContent = '等待中';
                     }
                     
                     if (data.driver_available) {
                         driverStatus.className = 'badge bg-success';
-                        driverStatus.textContent = '可用';
+                        driverStatus.textContent = '正常';
                     } else {
                         driverStatus.className = 'badge bg-danger';
                         driverStatus.textContent = '不可用';

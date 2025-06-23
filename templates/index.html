@@ -68,8 +68,24 @@
     </div>
 </div>
 
+<!-- 下一次采集倒计时 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card text-center fade-in" style="animation-delay: 0.5s">
+            <div class="card-body">
+                <div class="mb-3">
+                    <i class="bi bi-stopwatch text-info" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-info mb-2">下一次采集倒计时</h5>
+                <h2 id="countdown-timer" class="card-text fw-bold text-info">--:--:--</h2>
+                <p class="text-muted mb-0">检查间隔: <span id="check-interval-display">-</span> 分钟</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 新闻列表 -->
-<div class="card fade-in" style="animation-delay: 0.5s">
+<div class="card fade-in" style="animation-delay: 0.6s">
     <div class="card-header">
         <div class="d-flex justify-content-between align-items-center">
             <h5 class="mb-0">
@@ -102,6 +118,8 @@
 {% block scripts %}
 <script>
     let newsData = [];
+    let countdownInterval = null;
+    let nextCheckTime = null;
     
     // 显示提示信息
     function showAlert(message, type = 'info') {
@@ -298,12 +316,66 @@
         return div.innerHTML;
     }
     
-    // 页面加载时获取新闻
+    // 获取系统状态和倒计时信息
+    function updateSystemStatus() {
+        fetch('/api/status')
+            .then(response => response.json())
+            .then(data => {
+                if (data.check_interval) {
+                    document.getElementById('check-interval-display').textContent = data.check_interval;
+                }
+                
+                if (data.next_check_time) {
+                    nextCheckTime = new Date(data.next_check_time);
+                    startCountdown();
+                }
+            })
+            .catch(error => {
+                console.error('获取系统状态失败:', error);
+            });
+    }
+    
+    // 开始倒计时
+    function startCountdown() {
+        if (countdownInterval) {
+            clearInterval(countdownInterval);
+        }
+        
+        countdownInterval = setInterval(function() {
+            if (!nextCheckTime) return;
+            
+            const now = new Date();
+            const timeDiff = nextCheckTime - now;
+            
+            if (timeDiff <= 0) {
+                document.getElementById('countdown-timer').textContent = '00:00:00';
+                // 倒计时结束，重新获取状态
+                setTimeout(updateSystemStatus, 1000);
+                return;
+            }
+            
+            const hours = Math.floor(timeDiff / (1000 * 60 * 60));
+            const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+            
+            const timeString = String(hours).padStart(2, '0') + ':' + 
+                             String(minutes).padStart(2, '0') + ':' + 
+                             String(seconds).padStart(2, '0');
+            
+            document.getElementById('countdown-timer').textContent = timeString;
+        }, 1000);
+    }
+    
+    // 页面加载时获取新闻和系统状态
     document.addEventListener('DOMContentLoaded', function() {
         refreshNews();
+        updateSystemStatus();
     });
     
-    // 每30秒自动刷新
+    // 每30秒自动刷新新闻
     setInterval(refreshNews, 30000);
+    
+    // 每5秒更新系统状态
+    setInterval(updateSystemStatus, 5000);
 </script>
 {% endblock %}
