@@ -94,6 +94,34 @@
             </div>
         </div>
         
+        <!-- 关键词筛选设置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.3s">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-funnel text-danger me-2"></i>
+                    关键词筛选
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="keyword-filters-enabled">
+                        <label class="form-check-label fw-semibold" for="keyword-filters-enabled">
+                            <i class="bi bi-funnel-fill text-danger me-1"></i>
+                            启用关键词筛选
+                        </label>
+                    </div>
+                    <div class="form-text">启用后，只有匹配关键词规则的新闻才会被推送。未启用时所有新闻都会推送。</div>
+                </div>
+                <div id="keyword-rules-container">
+                    <!-- 规则列表将在这里动态生成 -->
+                </div>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="addKeywordRule()">
+                    <i class="bi bi-plus-circle"></i> 添加筛选规则
+                </button>
+            </div>
+        </div>
+
         <!-- 翻译设置 -->
         <div class="card mb-4 fade-in" style="animation-delay: 0.3s">
             <div class="card-header bg-light">
@@ -314,6 +342,156 @@
         }
     }
     
+    // ========== 关键词筛选 ==========
+
+    // 渲染关键词规则列表
+    function renderKeywordRules() {
+        const container = document.getElementById('keyword-rules-container');
+        if (!config.keyword_filters || !config.keyword_filters.rules) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+        config.keyword_filters.rules.forEach((rule, index) => {
+            const keywordsStr = (rule.keywords || []).join(', ');
+            const modeLabel = rule.mode === 'and' ? '全部匹配(AND)' : '任意匹配(OR)';
+            const modeIcon = rule.mode === 'and' ? 'bi-intersect' : 'bi-union';
+            const modeBtnClass = rule.mode === 'and' ? 'btn-warning' : 'btn-info';
+
+            let keywordsHtml = '';
+            (rule.keywords || []).forEach((kw, kwIndex) => {
+                keywordsHtml += `
+                    <span class="badge bg-secondary me-1 mb-1 keyword-badge" style="font-size: 0.85rem;">
+                        ${escapeHtml(kw)}
+                        <i class="bi bi-x ms-1" style="cursor:pointer;" onclick="removeKeyword(${index}, ${kwIndex})"></i>
+                    </span>
+                `;
+            });
+
+            html += `
+                <div class="card mb-3" id="keyword-rule-${index}">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center flex-grow-1">
+                            <div class="form-check me-3">
+                                <input class="form-check-input" type="checkbox" id="rule-enabled-${index}" ${rule.enabled !== false ? 'checked' : ''}>
+                            </div>
+                            <input type="text" class="form-control form-control-sm me-2" style="max-width: 200px;"
+                                id="rule-name-${index}" value="${escapeHtml(rule.name || '规则 ' + (index + 1))}" placeholder="规则名称">
+                            <button type="button" class="btn btn-sm ${modeBtnClass}" id="rule-mode-btn-${index}"
+                                onclick="toggleRuleMode(${index})" title="点击切换匹配模式">
+                                <i class="bi ${modeIcon}"></i> ${modeLabel}
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeKeywordRule(${index})">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <label class="form-label fw-semibold small">关键词列表</label>
+                            <div id="keywords-display-${index}" class="mb-2">
+                                ${keywordsHtml}
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="new-keyword-${index}" placeholder="输入关键词后按回车或点击添加"
+                                    onkeydown="if(event.key==='Enter'){event.preventDefault();addKeyword(${index});}">
+                                <button class="btn btn-outline-secondary" type="button" onclick="addKeyword(${index})">
+                                    <i class="bi bi-plus"></i> 添加
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                ${rule.mode === 'or' ? '任意一个关键词匹配即推送（OR 模式）' : '所有关键词同时出现才推送（AND 模式）'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        if (html === '') {
+            html = `
+                <div class="text-center text-muted py-3" id="no-rules-hint">
+                    <i class="bi bi-info-circle"></i> 暂无筛选规则，点击下方按钮添加
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // 切换规则匹配模式
+    function toggleRuleMode(index) {
+        const rule = config.keyword_filters.rules[index];
+        rule.mode = rule.mode === 'or' ? 'and' : 'or';
+        renderKeywordRules();
+    }
+
+    // 添加关键词规则
+    function addKeywordRule() {
+        if (!config.keyword_filters) {
+            config.keyword_filters = { enabled: false, rules: [] };
+        }
+        config.keyword_filters.rules.push({
+            name: '规则 ' + (config.keyword_filters.rules.length + 1),
+            enabled: true,
+            mode: 'or',
+            keywords: []
+        });
+        renderKeywordRules();
+    }
+
+    // 删除关键词规则
+    function removeKeywordRule(index) {
+        if (confirm('确定要删除这条筛选规则吗？')) {
+            config.keyword_filters.rules.splice(index, 1);
+            renderKeywordRules();
+        }
+    }
+
+    // 添加关键词到规则
+    function addKeyword(ruleIndex) {
+        const input = document.getElementById(`new-keyword-${ruleIndex}`);
+        const keyword = input.value.trim();
+        if (!keyword) return;
+
+        if (!config.keyword_filters.rules[ruleIndex].keywords) {
+            config.keyword_filters.rules[ruleIndex].keywords = [];
+        }
+
+        // 去重
+        if (config.keyword_filters.rules[ruleIndex].keywords.includes(keyword)) {
+            showAlert('该关键词已存在', 'warning');
+            return;
+        }
+
+        config.keyword_filters.rules[ruleIndex].keywords.push(keyword);
+        input.value = '';
+        renderKeywordRules();
+        // 重新聚焦输入框
+        setTimeout(() => {
+            const newInput = document.getElementById(`new-keyword-${ruleIndex}`);
+            if (newInput) newInput.focus();
+        }, 50);
+    }
+
+    // 从规则中删除关键词
+    function removeKeyword(ruleIndex, keywordIndex) {
+        config.keyword_filters.rules[ruleIndex].keywords.splice(keywordIndex, 1);
+        renderKeywordRules();
+    }
+
+    // 初始化关键词筛选UI
+    function initKeywordFiltersUI() {
+        if (!config.keyword_filters) {
+            config.keyword_filters = { enabled: false, rules: [] };
+        }
+        document.getElementById('keyword-filters-enabled').checked = config.keyword_filters.enabled || false;
+        renderKeywordRules();
+    }
+
+    // ========== 通知设置 ==========
+
     // 初始化通知配置UI
     function initNotificationUI() {
         // 确保配置结构存在
@@ -461,11 +639,23 @@
         config.notification.bark_url = config.notification.bark_urls.length > 0 ? config.notification.bark_urls[0] : '';
         config.notification.serverchan_key = config.notification.serverchan_keys.length > 0 ? config.notification.serverchan_keys[0] : '';
         
+        // 关键词筛选设置
+        config.keyword_filters.enabled = document.getElementById('keyword-filters-enabled').checked;
+        // 从 DOM 更新每条规则的 name 和 enabled，keywords/mode 已在操作时直接更新到 config
+        const rules = config.keyword_filters.rules || [];
+        rules.forEach((rule, index) => {
+            const enabledEl = document.getElementById(`rule-enabled-${index}`);
+            const nameEl = document.getElementById(`rule-name-${index}`);
+            if (enabledEl) rule.enabled = enabledEl.checked;
+            if (nameEl) rule.name = nameEl.value.trim() || '规则 ' + (index + 1);
+        });
+        config.keyword_filters.rules = rules;
+
         // 翻译设置
         config.translation.enabled = document.getElementById('translation-enabled').checked;
         config.translation.api_url = document.getElementById('translation-api-url').value.trim();
         config.translation.api_key = document.getElementById('translation-api-key').value.trim();
-        
+
         // 新闻网站设置
         config.news_sites.forEach((site, index) => {
             const enabledEl = document.getElementById(`site-enabled-${index}`);
@@ -523,6 +713,7 @@
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', function() {
         initNotificationUI();
+        initKeywordFiltersUI();
         renderNewsSites();
     });
     

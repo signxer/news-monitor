@@ -274,16 +274,14 @@
     }
   ],
   "notification": {
-    "bark_url": "https://api.day.app/yoFTAeEN4fV66DqhvJkxZ6",
-    "bark_urls": [
-      "https://api.day.app/yoFTAeEN4fV66DqhvJkxZ6"
-    ],
+    "bark_url": "",
+    "bark_urls": [],
     "serverchan_key": "",
     "serverchan_keys": []
   },
   "translation": {
     "api_key": "",
-    "api_url": "https://api.deeplx.org/dxkM2AGEnEjqCh3XZzicAU1g8xfQ3yaPpa7e-T7LHKE/translate",
-    "enabled": true
+    "api_url": "",
+    "enabled": false
   }
 }

@@ -85,6 +85,10 @@ class NewsMonitor:
                 'api_url': '',
                 'enabled': False
             },
+            'keyword_filters': {
+                'enabled': False,
+                'rules': []
+            },
             'news_sites': [
                 {
                     'name': 'BBC News',
@@ -499,7 +503,42 @@ class NewsMonitor:
             logger.error(f"翻译失败: {str(e)}")
         
         return text
-    
+
+    def match_keyword_rules(self, news_item):
+        """根据关键词规则判断是否应该推送该条新闻
+
+        规则逻辑：
+        - 如果 keyword_filters 未启用或没有规则，返回 True（全部推送）
+        - 遍历所有启用的规则，任一规则匹配即返回 True（规则间是 OR 关系）
+        - 每条规则内部根据 mode 字段判断：'or' 任意关键词匹配，'and' 所有关键词同时匹配
+        - 匹配范围：标题（title）和翻译标题（translated_title），大小写不敏感
+        """
+        filters = self.config.get('keyword_filters', {})
+        if not filters.get('enabled', False):
+            return True
+
+        rules = filters.get('rules', [])
+        active_rules = [r for r in rules if r.get('enabled', True) and r.get('keywords')]
+        if not active_rules:
+            return True
+
+        title = (news_item.get('title', '') or '').lower()
+        translated_title = (news_item.get('translated_title', '') or '').lower()
+        match_text = f"{title} {translated_title}"
+
+        for rule in active_rules:
+            keywords = [kw.lower() for kw in rule['keywords'] if kw.strip()]
+            if not keywords:
+                continue
+
+            mode = rule.get('mode', 'or')
+            if mode == 'or' and any(kw in match_text for kw in keywords):
+                return True
+            if mode == 'and' and all(kw in match_text for kw in keywords):
+                return True
+
+        return False
+
     def scrape_rss_site(self, site_config):
         """抓取RSS新闻网站"""
         if not site_config.get('enabled', True):
@@ -1045,11 +1084,18 @@ class NewsMonitor:
                         logger.error(f"检查站点 {site.get('name', 'Unknown')} 失败: {str(e)}")
             
             new_count, new_news_list = self.save_news(all_news)
-            
+
             if new_count > 0:
-                message = f"发现 {new_count} 条新新闻"
-                logger.info(message)
-                self.send_notification_with_details(new_news_list)
+                logger.info(f"发现 {new_count} 条新新闻")
+
+                # 关键词筛选
+                filtered_news = [n for n in new_news_list if self.match_keyword_rules(n)]
+
+                if filtered_news:
+                    logger.info(f"{len(filtered_news)} 条新闻匹配关键词规则，开始推送")
+                    self.send_notification_with_details(filtered_news)
+                else:
+                    logger.info(f"共 {new_count} 条新新闻，但无匹配关键词规则，跳过推送")
             else:
                 logger.info("没有发现新新闻")
                 
