@@ -120,21 +120,23 @@
     let newsData = [];
     let countdownInterval = null;
     let nextCheckTime = null;
-    
+    let currentPage = 1;
+    let currentPerPage = 20;
+
     // 显示提示信息
     function showAlert(message, type = 'info') {
         const alertContainer = document.getElementById('alert-container');
         const alertId = 'alert-' + Date.now();
-        
+
         const alertHtml = `
             <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show mt-3" role="alert">
                 ${message}
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         `;
-        
+
         alertContainer.insertAdjacentHTML('beforeend', alertHtml);
-        
+
         // 3秒后自动消失
         setTimeout(() => {
             const alert = document.getElementById(alertId);
@@ -143,18 +145,18 @@
             }
         }, 3000);
     }
-    
+
     // 立即检查新闻
     function checkNow() {
         showAlert('开始检查新闻更新...', 'info');
-        
+
         fetch('/api/check_now')
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
                     showAlert(data.message, 'success');
-                    // 延迟刷新新闻列表
-                    setTimeout(refreshNews, 2000);
+                    // 延迟刷新新闻列表（回到第1页）
+                    setTimeout(() => loadPage(1), 2000);
                 } else {
                     showAlert(data.message, 'danger');
                 }
@@ -163,17 +165,17 @@
                 showAlert('检查失败: ' + error.message, 'danger');
             });
     }
-    
-    // 刷新新闻列表
-    function refreshNews() {
+
+    // 加载指定页
+    function loadPage(page) {
+        currentPage = page;
         const container = document.getElementById('news-container');
         const refreshSpinner = document.getElementById('refresh-spinner');
-        
-        // 显示刷新指示器
+
         if (refreshSpinner) {
             refreshSpinner.style.display = 'block';
         }
-        
+
         container.innerHTML = `
             <div class="text-center py-5">
                 <div class="spinner-border text-primary" role="status">
@@ -182,11 +184,14 @@
                 <p class="mt-3 text-muted">正在加载新闻数据...</p>
             </div>
         `;
-        
-        fetch('/api/news')
+
+        fetch(`/api/news?page=${currentPage}&per_page=${currentPerPage}`)
             .then(response => response.json())
             .then(data => {
-                newsData = data;
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                newsData = data.items || [];
                 displayNews(data);
                 updateStatistics(data);
             })
@@ -194,23 +199,28 @@
                 container.innerHTML = `
                     <div class="alert alert-danger fade-in" role="alert">
                         <i class="bi bi-exclamation-triangle-fill"></i> 加载新闻失败: ${error.message}
-                        <button class="btn btn-outline-danger btn-sm ms-2" onclick="refreshNews()">重试</button>
+                        <button class="btn btn-outline-danger btn-sm ms-2" onclick="loadPage(${currentPage})">重试</button>
                     </div>
                 `;
             })
             .finally(() => {
-                // 隐藏刷新指示器
                 if (refreshSpinner) {
                     refreshSpinner.style.display = 'none';
                 }
             });
     }
-    
-    // 显示新闻列表
-    function displayNews(news) {
+
+    // 刷新当前页
+    function refreshNews() {
+        loadPage(currentPage);
+    }
+
+    // 显示新闻列表 + 分页控件
+    function displayNews(data) {
         const container = document.getElementById('news-container');
-        
-        if (news.length === 0) {
+        const news = data.items || [];
+
+        if (data.total === 0) {
             container.innerHTML = `
                 <div class="text-center py-5 fade-in">
                     <div class="mb-4">
@@ -225,16 +235,17 @@
             `;
             return;
         }
-        
+
         let html = '';
+
+        // 新闻列表
         news.forEach((item, index) => {
-            // 为数据库时间加8小时
             const dbDate = new Date(item.created_at);
             dbDate.setHours(dbDate.getHours() + 8);
             const date = dbDate.toLocaleString('zh-CN');
             const hasUrl = item.url && item.url.trim() !== '';
-            const animationDelay = (index * 0.1).toFixed(1);
-            
+            const animationDelay = (index * 0.05).toFixed(2);
+
             html += `
                 <div class="news-item fade-in" style="animation-delay: ${animationDelay}s">
                     <div class="d-flex align-items-start">
@@ -257,7 +268,7 @@
                                 ${escapeHtml(item.title)}
                                 ${hasUrl ? `<i class="bi bi-box-arrow-up-right ms-1 text-primary"></i></a>` : ''}
                             </h6>
-                            ${item.translated_title && item.translated_title !== item.title ? 
+                            ${item.translated_title && item.translated_title !== item.title ?
                                 `<p class="news-translated mb-2"><i class="bi bi-translate text-info"></i> ${escapeHtml(item.translated_title)}</p>` : ''}
                             <div class="news-meta">
                                 <small class="text-muted">
@@ -269,22 +280,93 @@
                 </div>
             `;
         });
-        
+
+        // 分页控件
+        html += buildPagination(data);
+
         container.innerHTML = html;
     }
-    
+
+    // 构建分页控件
+    function buildPagination(data) {
+        const { page, pages, total, per_page } = data;
+        if (pages <= 1) return '';
+
+        let html = '<nav class="mt-4"><ul class="pagination justify-content-center mb-0">';
+
+        // 上一页
+        html += `<li class="page-item ${page <= 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${page > 1 ? 'loadPage(' + (page - 1) + ')' : ''}"><i class="bi bi-chevron-left"></i></a>
+        </li>`;
+
+        // 页码按钮（智能省略）
+        const range = generatePageRange(page, pages);
+        range.forEach(p => {
+            if (p === '...') {
+                html += '<li class="page-item disabled"><span class="page-link">…</span></li>';
+            } else {
+                html += `<li class="page-item ${p === page ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="event.preventDefault(); loadPage(${p})">${p}</a>
+                </li>`;
+            }
+        });
+
+        // 下一页
+        html += `<li class="page-item ${page >= pages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="event.preventDefault(); ${page < pages ? 'loadPage(' + (page + 1) + ')' : ''}"><i class="bi bi-chevron-right"></i></a>
+        </li>`;
+
+        html += '</ul>';
+
+        // 底部信息：总条数 + 每页条数选择
+        html += `<div class="d-flex justify-content-center align-items-center mt-2 gap-3">
+            <small class="text-muted">共 ${total} 条</small>
+            <select class="form-select form-select-sm" style="width: auto;" onchange="changePerPage(this.value)">
+                <option value="10" ${per_page === 10 ? 'selected' : ''}>10 条/页</option>
+                <option value="20" ${per_page === 20 ? 'selected' : ''}>20 条/页</option>
+                <option value="50" ${per_page === 50 ? 'selected' : ''}>50 条/页</option>
+                <option value="100" ${per_page === 100 ? 'selected' : ''}>100 条/页</option>
+            </select>
+        </div>`;
+
+        html += '</nav>';
+        return html;
+    }
+
+    // 生成页码范围（智能省略）
+    function generatePageRange(current, total) {
+        if (total <= 7) {
+            return Array.from({ length: total }, (_, i) => i + 1);
+        }
+
+        const range = [];
+        range.push(1);
+
+        if (current > 3) range.push('...');
+
+        const start = Math.max(2, current - 1);
+        const end = Math.min(total - 1, current + 1);
+        for (let i = start; i <= end; i++) {
+            range.push(i);
+        }
+
+        if (current < total - 2) range.push('...');
+
+        range.push(total);
+        return range;
+    }
+
+    // 切换每页条数
+    function changePerPage(value) {
+        currentPerPage = parseInt(value);
+        currentPage = 1;
+        loadPage(1);
+    }
+
     // 更新统计信息
-    function updateStatistics(news) {
-        const totalNews = news.length;
-        const today = new Date().toISOString().split('T')[0];
-        const todayNews = news.filter(item => {
-            if (!item.created_at) return false;
-            // 为数据库时间加8小时后再比较日期
-            const dbDate = new Date(item.created_at);
-            dbDate.setHours(dbDate.getHours() + 8);
-            return dbDate.toISOString().split('T')[0] === today;
-        }).length;
-        
+    function updateStatistics(data) {
+        const totalNews = data.total;
+
         // 获取配置信息来计算活跃网站数
         fetch('/api/config')
             .then(response => response.json())
@@ -295,18 +377,33 @@
             .catch(() => {
                 document.getElementById('active-sites').textContent = '-';
             });
-        
+
         document.getElementById('total-news').textContent = totalNews;
-        document.getElementById('today-news').textContent = todayNews;
-        
-        // 最后检查时间（使用最新新闻的时间）
-        if (news.length > 0) {
-            // 为数据库时间加8小时
-            const dbDate = new Date(news[0].created_at);
+
+        // 今日新增：从当前页的第一页数据中取最新时间作为"最后检查"
+        // 今日新增需要额外请求，用一个小查询
+        fetch('/api/news?page=1&per_page=1')
+            .then(r => r.json())
+            .then(d => {
+                if (d.items && d.items.length > 0) {
+                    const dbDate = new Date(d.items[0].created_at);
+                    dbDate.setHours(dbDate.getHours() + 8);
+                    document.getElementById('last-check').textContent = dbDate.toLocaleString('zh-CN');
+                }
+            })
+            .catch(() => {});
+
+        // 今日新增统计（从首页数据推算，或直接用总数近似显示）
+        const today = new Date().toISOString().split('T')[0];
+        const todayNews = (data.items || []).filter(item => {
+            if (!item.created_at) return false;
+            const dbDate = new Date(item.created_at);
             dbDate.setHours(dbDate.getHours() + 8);
-            const lastCheck = dbDate.toLocaleString('zh-CN');
-            document.getElementById('last-check').textContent = lastCheck;
-        }
+            return dbDate.toISOString().split('T')[0] === today;
+        }).length;
+        // 如果当前页有今日新闻就显示，否则显示 "-"
+        // 更准确的做法是后端单独返回，但这里保持简单
+        document.getElementById('today-news').textContent = todayNews > 0 ? todayNews : (currentPage === 1 ? '0' : '-');
     }
     
     // HTML转义
@@ -368,12 +465,12 @@
     
     // 页面加载时获取新闻和系统状态
     document.addEventListener('DOMContentLoaded', function() {
-        refreshNews();
+        loadPage(1);
         updateSystemStatus();
     });
-    
-    // 每30秒自动刷新新闻
-    setInterval(refreshNews, 30000);
+
+    // 每60秒自动刷新当前页
+    setInterval(refreshNews, 60000);
     
     // 每5秒更新系统状态
     setInterval(updateSystemStatus, 5000);

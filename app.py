@@ -1152,17 +1152,29 @@ def api_config():
 @app.route('/api/news')
 def api_news():
     try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        per_page = min(per_page, 100)  # 上限100条
+
+        offset = (page - 1) * per_page
+
         conn = sqlite3.connect('news.db')
         cursor = conn.cursor()
+
+        # 总数
+        cursor.execute('SELECT COUNT(*) FROM news')
+        total = cursor.fetchone()[0]
+
+        # 分页数据
         cursor.execute('''
             SELECT site_name, title, translated_title, url, date, created_at
             FROM news
             ORDER BY created_at DESC
-
-        ''')
+            LIMIT ? OFFSET ?
+        ''', (per_page, offset))
         news = cursor.fetchall()
         conn.close()
-        
+
         news_list = []
         for item in news:
             news_list.append({
@@ -1173,8 +1185,14 @@ def api_news():
                 'date': item[4],
                 'created_at': item[5]
             })
-        
-        return jsonify(news_list)
+
+        return jsonify({
+            'items': news_list,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'pages': (total + per_page - 1) // per_page
+        })
     except Exception as e:
         return jsonify({'error': str(e)})
 
