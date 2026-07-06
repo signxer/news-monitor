@@ -1,0 +1,250 @@
+name: Build Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt
+
+      - name: Build exe
+        run: pyinstaller news_monitor.spec
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/news_monitor.exe
+
+  build-linux-x64:
+    name: Linux x64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller -r requirements.txt
+          sudo apt-get update && sudo apt-get install -y ruby ruby-dev gcc make
+          sudo gem install fpm
+
+      - name: Build with PyInstaller
+        run: pyinstaller news_monitor.spec
+
+      - name: Package as deb
+        run: |
+          mkdir -p pkg/usr/local/bin
+          mkdir -p pkg/usr/lib/news-monitor
+          cp dist/news_monitor pkg/usr/lib/news-monitor/
+          cat > pkg/usr/local/bin/news-monitor << 'EOF'
+          #!/bin/sh
+          exec /usr/lib/news-monitor/news_monitor "$@"
+          EOF
+          chmod +x pkg/usr/local/bin/news-monitor
+          chmod +x pkg/usr/lib/news-monitor/news_monitor
+
+          fpm -s dir -t deb \
+            -n news-monitor \
+            -v "${TAG#v}" \
+            --description "News Monitor - RSS and web news monitoring tool" \
+            --url "https://github.com/signxer/news-monitor" \
+            --license MIT \
+            --architecture amd64 \
+            --depends "libnss3" \
+            --depends "libatk-bridge2.0-0" \
+            --depends "libdrm2" \
+            --depends "libxcomposite1" \
+            --depends "libxdamage1" \
+            --depends "libgbm1" \
+            --depends "libgtk-3-0" \
+            -C pkg \
+            -p dist/
+        env:
+          TAG: ${{ github.ref_name || github.event.inputs.tag }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: dist/*.deb
+
+  build-linux-arm64:
+    name: Linux arm64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build deb in ARM64 container
+        run: |
+          docker run --rm --platform linux/arm64 \
+            -v "${{ github.workspace }}:/workspace" \
+            -e TAG="${{ github.ref_name || github.event.inputs.tag }}" \
+            ubuntu:22.04 bash -c '
+            set -e
+            apt-get update
+            apt-get install -y python3 python3-pip python3-venv ruby ruby-dev gcc make
+            pip3 install pyinstaller -r /workspace/requirements.txt
+            cd /workspace
+            pyinstaller news_monitor.spec
+
+            mkdir -p /tmp/pkg/usr/local/bin /tmp/pkg/usr/lib/news-monitor
+            cp dist/news_monitor /tmp/pkg/usr/lib/news-monitor/
+            printf "#!/bin/sh\nexec /usr/lib/news-monitor/news_monitor \"\$@\"\n" > /tmp/pkg/usr/local/bin/news-monitor
+            chmod +x /tmp/pkg/usr/local/bin/news-monitor
+            chmod +x /tmp/pkg/usr/lib/news-monitor/news_monitor
+
+            gem install fpm
+            fpm -s dir -t deb \
+              -n news-monitor \
+              -v "${TAG#v}" \
+              --description "News Monitor" \
+              --architecture arm64 \
+              --depends "libnss3" \
+              --depends "libatk-bridge2.0-0" \
+              --depends "libdrm2" \
+              --depends "libgbm1" \
+              -C /tmp/pkg \
+              -p /workspace/dist/
+            '
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64
+          path: dist/*.deb
+
+  build-macos-x64:
+    name: macOS x64
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: pyinstaller news_monitor.spec
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg-root
+          cp -r dist/news_monitor dmg-root/NewsMonitor
+          hdiutil create -volname "NewsMonitor" \
+            -srcfolder dmg-root \
+            -ov -format UDZO \
+            "dist/NewsMonitor-macOS-x64.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-x64
+          path: dist/NewsMonitor-macOS-x64.dmg
+
+  build-macos-arm64:
+    name: macOS arm64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: pyinstaller news_monitor.spec
+
+      - name: Create DMG
+        run: |
+          mkdir -p dmg-root
+          cp -r dist/news_monitor dmg-root/NewsMonitor
+          hdiutil create -volname "NewsMonitor" \
+            -srcfolder dmg-root \
+            -ov -format UDZO \
+            "dist/NewsMonitor-macOS-arm64.dmg"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: dist/NewsMonitor-macOS-arm64.dmg
+
+  release:
+    name: Create Release
+    needs: [build-windows, build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || github.event.inputs.tag }}
+          name: "Release ${{ github.ref_name || github.event.inputs.tag }}"
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/windows-x64/*
+            artifacts/linux-amd64/*
+            artifacts/linux-arm64/*
+            artifacts/macos-x64/*
+            artifacts/macos-arm64/*
+          body: |
+            ## 新闻监控系统 ${{ github.ref_name || github.event.inputs.tag }}
+
+            ### 下载
+            | 平台 | 文件 |
+            |------|------|
+            | Windows x64 | `news_monitor.exe` |
+            | Linux x64 | `news-monitor_*_amd64.deb` |
+            | Linux arm64 | `news-monitor_*_arm64.deb` |
+            | macOS x64 (Intel) | `NewsMonitor-macOS-x64.dmg` |
+            | macOS arm64 (Apple Silicon) | `NewsMonitor-macOS-arm64.dmg` |
+
+            ### 安装说明
+            - **Windows**: 直接运行 `news_monitor.exe`
+            - **Linux deb**: `sudo dpkg -i news-monitor_*.deb && news-monitor`
+            - **macOS DMG**: 打开 DMG，将 NewsMonitor 拖到任意位置，双击运行

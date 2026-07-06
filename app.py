@@ -7,8 +7,6 @@ import time
 import threading
 import schedule
 import requests
-import platform
-import zipfile
 import logging
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, redirect, url_for
@@ -23,10 +21,14 @@ from selenium.common.exceptions import TimeoutException, WebDriverException
 from bs4 import BeautifulSoup
 import sqlite3
 from urllib.parse import urljoin, urlparse
-import xml.etree.ElementTree as ET
 import feedparser
+from paths import get_config_path, get_db_path, get_log_path, get_template_dir, migrate_from_cwd
 
-app = Flask(__name__)
+# 跨平台路径迁移（首次运行时将旧文件迁移到新位置）
+migrate_from_cwd()
+
+# Flask 应用（指定模板目录）
+app = Flask(__name__, template_folder=str(get_template_dir()))
 app.secret_key = 'news_monitor_secret_key_2024'
 
 # 配置日志
@@ -34,7 +36,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('news_monitor.log', encoding='utf-8'),
+        logging.FileHandler(str(get_log_path()), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -43,30 +45,9 @@ logger = logging.getLogger(__name__)
 class NewsMonitor:
     def __init__(self):
         self.config = self.load_config()
-        self.driver_path = None
         self.is_running = False
         self.last_check_time = None
         self.init_database()
-        # 在服务启动时检查ChromeDriver
-        self.init_chromedriver()
-        
-    def find_existing_chromedriver(self):
-        """查找已存在的ChromeDriver"""
-        try:
-            # 在drivers目录中查找chromedriver可执行文件
-            if os.path.exists('drivers'):
-                for root, dirs, files in os.walk('drivers'):
-                    for file in files:
-                        if file.startswith('chromedriver') and not file.endswith('.zip'):
-                            driver_path = os.path.join(root, file)
-                            if os.path.isfile(driver_path) and os.access(driver_path, os.X_OK):
-                                logger.info(f"找到已存在的ChromeDriver: {driver_path}")
-                                return driver_path
-            logger.info("未找到已存在的ChromeDriver，将在需要时下载")
-            return None
-        except Exception as e:
-            logger.error(f"查找ChromeDriver时出错: {str(e)}")
-            return None
         
     def load_config(self):
         """加载配置文件"""
@@ -123,8 +104,9 @@ class NewsMonitor:
             ]
         }
         
+        config_path = str(get_config_path())
         try:
-            with open('config.json', 'r', encoding='utf-8') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 # 合并默认配置
                 for key in default_config:
@@ -158,12 +140,13 @@ class NewsMonitor:
         """保存配置文件"""
         if config is None:
             config = self.config
-        with open('config.json', 'w', encoding='utf-8') as f:
+        config_path = str(get_config_path())
+        with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
     
     def init_database(self):
         """初始化数据库"""
-        conn = sqlite3.connect('news.db')
+        conn = sqlite3.connect(str(get_db_path()))
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS news (
@@ -180,287 +163,30 @@ class NewsMonitor:
         conn.commit()
         conn.close()
     
-    def init_chromedriver(self):
-        """初始化ChromeDriver，只在服务启动时检查一次"""
-        try:
-            # 首先检查是否已存在ChromeDriver
-            for root, dirs, files in os.walk('drivers'):
-                for file in files:
-                    if file.startswith('chromedriver') and not file.endswith('.zip'):
-                        driver_candidate = os.path.join(root, file)
-                        if os.path.exists(driver_candidate):
-                            # 检查文件是否可执行
-                            if os.access(driver_candidate, os.X_OK):
-                                self.driver_path = driver_candidate
-                                logger.info(f"找到已存在的ChromeDriver: {self.driver_path}")
-                                return True
-                            else:
-                                # 给予执行权限
-                                os.chmod(driver_candidate, 0o755)
-                                self.driver_path = driver_candidate
-                                logger.info(f"找到ChromeDriver并设置执行权限: {self.driver_path}")
-                                return True
-            
-            # 如果没有找到，则下载
-            logger.info("未找到ChromeDriver，开始下载...")
-            if self.download_chromedriver():
-                logger.info("ChromeDriver初始化完成")
-                return True
-            else:
-                logger.error("ChromeDriver初始化失败")
-                return False
-                
-        except Exception as e:
-            logger.error(f"初始化ChromeDriver时出错: {str(e)}")
-            return False
-    
-    def get_platform_info(self):
-        """获取当前平台信息"""
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-        
-        if system == 'darwin':  # macOS
-            if 'arm' in machine or 'aarch64' in machine:
-                return 'mac-arm64'
-            else:
-                return 'mac-x64'
-        elif system == 'linux':
-            return 'linux64'
-        elif system == 'windows':
-            if '64' in machine:
-                return 'win64'
-            else:
-                return 'win32'
-        else:
-            return 'linux64'  # 默认
-    
-    def get_chrome_version(self):
-        """获取本地Chrome浏览器版本"""
-        try:
-            system = platform.system().lower()
-            
-            if system == 'darwin':  # macOS
-                import subprocess
-                import plistlib
-                
-                # 尝试从Chrome应用包中读取版本信息
-                chrome_path = '/Applications/Google Chrome.app/Contents/Info.plist'
-                if os.path.exists(chrome_path):
-                    with open(chrome_path, 'rb') as f:
-                        plist = plistlib.load(f)
-                        version = plist.get('CFBundleShortVersionString', '')
-                        if version:
-                            logger.info(f"检测到Chrome版本: {version}")
-                            return version
-                
-                # 备用方法：尝试执行Chrome命令
-                try:
-                    result = subprocess.run([
-                        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-                        '--version'
-                    ], capture_output=True, text=True, timeout=10)
-                    if result.returncode == 0:
-                        version_line = result.stdout.strip()
-                        # 解析版本号，格式通常是 "Google Chrome 120.0.6099.109"
-                        version = version_line.split()[-1]
-                        logger.info(f"检测到Chrome版本: {version}")
-                        return version
-                except:
-                    pass
-                    
-            elif system == 'linux':
-                import subprocess
-                try:
-                    # 尝试多个可能的Chrome命令
-                    for cmd in ['google-chrome', 'google-chrome-stable', 'chromium-browser']:
-                        try:
-                            result = subprocess.run([cmd, '--version'], 
-                                                   capture_output=True, text=True, timeout=10)
-                            if result.returncode == 0:
-                                version_line = result.stdout.strip()
-                                version = version_line.split()[-1]
-                                logger.info(f"检测到Chrome版本: {version}")
-                                return version
-                        except:
-                            continue
-                except:
-                    pass
-                    
-            elif system == 'windows':
-                import subprocess
-                import winreg
-                
-                # 尝试从注册表读取版本
-                try:
-                    key_paths = [
-                        r'SOFTWARE\Google\Chrome\BLBeacon',
-                        r'SOFTWARE\WOW6432Node\Google\Chrome\BLBeacon'
-                    ]
-                    
-                    for key_path in key_paths:
-                        try:
-                            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
-                                version, _ = winreg.QueryValueEx(key, 'version')
-                                logger.info(f"检测到Chrome版本: {version}")
-                                return version
-                        except:
-                            continue
-                except:
-                    pass
-                
-                # 备用方法：尝试执行Chrome命令
-                try:
-                    chrome_paths = [
-                        r'C:\Program Files\Google\Chrome\Application\chrome.exe',
-                        r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'
-                    ]
-                    
-                    for chrome_path in chrome_paths:
-                        if os.path.exists(chrome_path):
-                            result = subprocess.run([chrome_path, '--version'], 
-                                                   capture_output=True, text=True, timeout=10)
-                            if result.returncode == 0:
-                                version_line = result.stdout.strip()
-                                version = version_line.split()[-1]
-                                logger.info(f"检测到Chrome版本: {version}")
-                                return version
-                except:
-                    pass
-                    
-        except Exception as e:
-            logger.warning(f"无法检测Chrome版本: {str(e)}")
-        
-        logger.warning("无法检测到Chrome版本，将使用最新版本")
-        return None
-    
-    def download_chromedriver(self):
-        """下载匹配的ChromeDriver"""
-        try:
-            logger.info("开始下载ChromeDriver...")
-            
-            # 获取本地Chrome版本
-            local_chrome_version = self.get_chrome_version()
-            
-            # 获取Chrome版本信息
-            response = requests.get('https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json')
-            versions_data = response.json()
-            
-            platform_name = self.get_platform_info()
-            logger.info(f"检测到平台: {platform_name}")
-            
-            # 查找匹配的版本
-            target_version = None
-            
-            if local_chrome_version:
-                # 首先尝试找到完全匹配的版本
-                for version_info in versions_data['versions']:
-                    if version_info['version'] == local_chrome_version:
-                        if 'chromedriver' in version_info['downloads']:
-                            for download in version_info['downloads']['chromedriver']:
-                                if download['platform'] == platform_name:
-                                    target_version = version_info
-                                    logger.info(f"找到完全匹配的ChromeDriver版本: {local_chrome_version}")
-                                    break
-                        if target_version:
-                            break
-                
-                # 如果没有完全匹配，尝试找到主版本号匹配的最新版本
-                if not target_version:
-                    local_major_version = local_chrome_version.split('.')[0]
-                    logger.info(f"寻找主版本号 {local_major_version} 匹配的ChromeDriver")
-                    
-                    for version_info in reversed(versions_data['versions']):
-                        version_major = version_info['version'].split('.')[0]
-                        if version_major == local_major_version:
-                            if 'chromedriver' in version_info['downloads']:
-                                for download in version_info['downloads']['chromedriver']:
-                                    if download['platform'] == platform_name:
-                                        target_version = version_info
-                                        logger.info(f"找到主版本号匹配的ChromeDriver版本: {version_info['version']}")
-                                        break
-                            if target_version:
-                                break
-            
-            # 如果仍然没有找到匹配版本，使用最新版本
-            if not target_version:
-                logger.warning("未找到匹配的ChromeDriver版本，使用最新版本")
-                for version_info in reversed(versions_data['versions']):
-                    if 'chromedriver' in version_info['downloads']:
-                        for download in version_info['downloads']['chromedriver']:
-                            if download['platform'] == platform_name:
-                                target_version = version_info
-                                break
-                        if target_version:
-                            break
-            
-            if not target_version:
-                raise Exception(f"未找到适合平台 {platform_name} 的ChromeDriver版本")
-            
-            version_num = target_version['version']
-            logger.info(f"将下载ChromeDriver版本: {version_num}")
-            
-            # 下载ChromeDriver
-            chromedriver_url = f"https://storage.googleapis.com/chrome-for-testing-public/{version_num}/{platform_name}/chromedriver-{platform_name}.zip"
-            
-            logger.info(f"下载ChromeDriver: {chromedriver_url}")
-            response = requests.get(chromedriver_url)
-            response.raise_for_status()
-            
-            # 保存并解压
-            os.makedirs('drivers', exist_ok=True)
-            zip_path = 'drivers/chromedriver.zip'
-            
-            with open(zip_path, 'wb') as f:
-                f.write(response.content)
-            
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall('drivers')
-            
-            # 查找chromedriver可执行文件
-            for root, dirs, files in os.walk('drivers'):
-                for file in files:
-                    if file.startswith('chromedriver') and not file.endswith('.zip'):
-                        self.driver_path = os.path.join(root, file)
-                        # 给予执行权限
-                        os.chmod(self.driver_path, 0o755)
-                        break
-                if self.driver_path:
-                    break
-            
-            os.remove(zip_path)
-            logger.info(f"ChromeDriver下载完成: {self.driver_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"下载ChromeDriver失败: {str(e)}")
-            return False
-    
     def create_webdriver(self):
-        """创建Chrome WebDriver"""
-        if not self.driver_path or not os.path.exists(self.driver_path):
-            raise Exception("ChromeDriver未初始化或文件不存在，请检查服务启动日志")
-        
+        """创建Chrome WebDriver（使用 webdriver-manager 自动管理驱动）"""
         chrome_options = Options()
-        # 确保Chrome窗口在前台显示，以便正确加载动态内容
+        chrome_options.add_argument('--headless=new')
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window-size=1920,1080')
         chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        # 禁用一些可能影响内容加载的功能
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        service = Service(self.driver_path)
+
+        # 优先使用 webdriver-manager 自动下载匹配的驱动
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
+            service = Service(ChromeDriverManager().install())
+            logger.info("使用 webdriver-manager 自动管理 ChromeDriver")
+        except Exception:
+            # fallback: 使用系统 PATH 中的 chromedriver
+            service = Service()
+            logger.info("使用系统 PATH 中的 ChromeDriver")
+
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        
-        # 设置窗口位置和大小，确保窗口可见
-        driver.set_window_position(0, 0)
-        driver.set_window_size(1920, 1080)
-        
-        # 移除webdriver标识
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        
         return driver
     
     def translate_text(self, text):
@@ -844,7 +570,7 @@ class NewsMonitor:
         if not news_items:
             return 0, []
         
-        conn = sqlite3.connect('news.db')
+        conn = sqlite3.connect(str(get_db_path()))
         cursor = conn.cursor()
         new_count = 0
         new_news_list = []
@@ -1015,7 +741,7 @@ class NewsMonitor:
     def clean_log_file(self):
         """清理日志文件，保留最近的日志内容"""
         try:
-            log_file_path = 'news_monitor.log'
+            log_file_path = str(get_log_path())
             if not os.path.exists(log_file_path):
                 return
             
@@ -1158,7 +884,7 @@ def api_news():
 
         offset = (page - 1) * per_page
 
-        conn = sqlite3.connect('news.db')
+        conn = sqlite3.connect(str(get_db_path()))
         cursor = conn.cursor()
 
         # 总数
@@ -1226,7 +952,7 @@ def api_restart():
 @app.route('/api/logs')
 def api_logs():
     try:
-        with open('news_monitor.log', 'r', encoding='utf-8') as f:
+        with open(str(get_log_path()), 'r', encoding='utf-8') as f:
             logs = f.readlines()[-100:]  # 获取最后100行
         return jsonify({'logs': logs})
     except Exception as e:
@@ -1244,7 +970,7 @@ def api_status():
     
     return jsonify({
         'is_running': monitor.is_running,
-        'driver_available': monitor.driver_path is not None and os.path.exists(monitor.driver_path) if monitor.driver_path else False,
+        'driver_available': True,
         'config_loaded': monitor.config is not None,
         'check_interval': monitor.config['check_interval'],
         'next_check_time': next_check_time.isoformat() if next_check_time else None,
@@ -1256,7 +982,7 @@ def api_test_notification():
     """测试通知功能，发送最新5条新闻"""
     try:
         # 从数据库获取最新5条新闻
-        conn = sqlite3.connect('news.db')
+        conn = sqlite3.connect(str(get_db_path()))
         cursor = conn.cursor()
         cursor.execute('''
             SELECT site_name, title, translated_title, url, date, created_at
