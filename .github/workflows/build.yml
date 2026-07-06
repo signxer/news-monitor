@@ -138,7 +138,7 @@ jobs:
 
   build-macos-x64:
     name: macOS x64
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -147,10 +147,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install pyinstaller -r requirements.txt
+        run: arch -x86_64 pip install pyinstaller -r requirements.txt
 
-      - name: Build with PyInstaller
-        run: pyinstaller news_monitor.spec
+      - name: Build with PyInstaller (x64 via Rosetta)
+        run: arch -x86_64 pyinstaller news_monitor.spec
 
       - name: Create DMG
         run: |
