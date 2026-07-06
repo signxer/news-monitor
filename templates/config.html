@@ -232,66 +232,99 @@
     function renderNewsSites() {
         const container = document.getElementById('news-sites-container');
         let html = '';
-        
+
         // 确保config和news_sites存在
         if (!config || !config.news_sites || !Array.isArray(config.news_sites)) {
             console.error('Config or news_sites not available:', config);
             container.innerHTML = '<div class="alert alert-warning">配置数据加载失败，请刷新页面重试。</div>';
             return;
         }
-        
+
+        // 统计信息
+        const totalCount = config.news_sites.length;
+        const enabledCount = config.news_sites.filter(s => s.enabled).length;
+        html += `
+            <div class="d-flex justify-content-between align-items-center mb-3 px-1">
+                <small class="text-muted">共 ${totalCount} 个网站，${enabledCount} 个已启用</small>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="expandAllSites()">
+                        <i class="bi bi-arrows-expand"></i> 全部展开
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="collapseAllSites()">
+                        <i class="bi bi-arrows-collapse"></i> 全部折叠
+                    </button>
+                </div>
+            </div>
+        `;
+
         config.news_sites.forEach((site, index) => {
+            const typeBadge = (site.site_type || 'html') === 'rss'
+                ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 me-2">RSS</span>'
+                : '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 me-2">HTML</span>';
+            const enabledBadge = site.enabled
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 me-2">启用</span>'
+                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 me-2">禁用</span>';
+
             html += `
-                <div class="card mb-3" id="site-${index}">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="site-enabled-${index}" ${site.enabled ? 'checked' : ''}>
-                            <label class="form-check-label" for="site-enabled-${index}">
-                                <strong>${escapeHtml(site.name)}</strong>
-                            </label>
+                <div class="card mb-2 site-card" id="site-${index}">
+                    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center site-card-header"
+                        style="cursor: pointer;" onclick="toggleSiteCard(${index})">
+                        <div class="d-flex align-items-center flex-grow-1" onclick="event.stopPropagation()">
+                            <div class="form-check me-2">
+                                <input class="form-check-input" type="checkbox" id="site-enabled-${index}"
+                                    ${site.enabled ? 'checked' : ''} onchange="updateSiteEnabledBadge(${index})">
+                            </div>
+                            <div class="d-flex align-items-center flex-grow-1" style="cursor: pointer;" onclick="toggleSiteCard(${index})">
+                                <i class="bi bi-chevron-right me-2 site-chevron" id="site-chevron-${index}" style="transition: transform 0.2s;"></i>
+                                <strong class="me-2">${escapeHtml(site.name)}</strong>
+                                ${typeBadge}
+                                <span id="site-enabled-badge-${index}">${enabledBadge}</span>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeNewsSite(${index})">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); removeNewsSite(${index})" title="删除">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label class="form-label">网站名称</label>
-                                    <input type="text" class="form-control" id="site-name-${index}" value="${escapeHtml(site.name)}">
+                    <div class="collapse" id="site-body-${index}">
+                        <div class="card-body pt-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label class="form-label">网站名称</label>
+                                        <input type="text" class="form-control" id="site-name-${index}" value="${escapeHtml(site.name)}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">网站URL</label>
+                                        <input type="url" class="form-control" id="site-url-${index}" value="${escapeHtml(site.url)}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">网站类型</label>
+                                        <select class="form-select" id="site-type-${index}" onchange="toggleSiteFields(${index})">
+                                            <option value="html" ${(site.site_type || 'html') === 'html' ? 'selected' : ''}>HTML网站</option>
+                                            <option value="rss" ${(site.site_type || 'html') === 'rss' ? 'selected' : ''}>RSS订阅</option>
+                                        </select>
+                                        <div class="form-text">HTML网站需要配置选择器，RSS订阅会自动解析</div>
+                                    </div>
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label">网站URL</label>
-                                    <input type="url" class="form-control" id="site-url-${index}" value="${escapeHtml(site.url)}">
+                                <div class="col-md-6" id="html-fields-${index}" style="display: ${(site.site_type || 'html') === 'html' ? 'block' : 'none'}">
+                                    <div class="mb-3">
+                                        <label class="form-label">标题选择器</label>
+                                        <input type="text" class="form-control" id="site-title-selector-${index}" value="${escapeHtml(site.title_selector || '')}">
+                                        <div class="form-text">CSS选择器，用于提取新闻标题</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">日期选择器（可选）</label>
+                                        <input type="text" class="form-control" id="site-date-selector-${index}" value="${escapeHtml(site.date_selector || '')}">
+                                        <div class="form-text">CSS选择器，用于提取发布日期</div>
+                                    </div>
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label">网站类型</label>
-                                    <select class="form-select" id="site-type-${index}" onchange="toggleSiteFields(${index})">
-                                        <option value="html" ${(site.site_type || 'html') === 'html' ? 'selected' : ''}>HTML网站</option>
-                                        <option value="rss" ${(site.site_type || 'html') === 'rss' ? 'selected' : ''}>RSS订阅</option>
-                                    </select>
-                                    <div class="form-text">选择网站类型：HTML网站需要配置选择器，RSS订阅会自动解析</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6" id="html-fields-${index}" style="display: ${(site.site_type || 'html') === 'html' ? 'block' : 'none'}">
-                                <div class="mb-3">
-                                    <label class="form-label">标题选择器</label>
-                                    <input type="text" class="form-control" id="site-title-selector-${index}" value="${escapeHtml(site.title_selector || '')}">
-                                    <div class="form-text">CSS选择器，用于提取新闻标题</div>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">日期选择器（可选）</label>
-                                    <input type="text" class="form-control" id="site-date-selector-${index}" value="${escapeHtml(site.date_selector || '')}">
-                                    <div class="form-text">CSS选择器，用于提取发布日期</div>
-                                </div>
-                            </div>
-                            <div class="col-md-6" id="rss-info-${index}" style="display: ${(site.site_type || 'html') === 'rss' ? 'block' : 'none'}">
-                                <div class="alert alert-info">
-                                    <i class="bi bi-info-circle"></i>
-                                    <strong>RSS订阅说明：</strong><br>
-                                    RSS订阅会自动解析标题、链接和发布日期，无需配置选择器。<br>
-                                    请确保URL指向有效的RSS/XML订阅源。
+                                <div class="col-md-6" id="rss-info-${index}" style="display: ${(site.site_type || 'html') === 'rss' ? 'block' : 'none'}">
+                                    <div class="alert alert-info mb-0">
+                                        <i class="bi bi-info-circle"></i>
+                                        <strong>RSS订阅说明：</strong><br>
+                                        RSS订阅会自动解析标题、链接和发布日期，无需配置选择器。<br>
+                                        请确保URL指向有效的RSS/XML订阅源。
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -299,8 +332,59 @@
                 </div>
             `;
         });
-        
+
         container.innerHTML = html;
+    }
+
+    // 展开/折叠单个站点卡片
+    function toggleSiteCard(index) {
+        const body = document.getElementById(`site-body-${index}`);
+        const chevron = document.getElementById(`site-chevron-${index}`);
+        if (!body) return;
+
+        const bsCollapse = bootstrap.Collapse.getOrCreateInstance(body);
+        if (body.classList.contains('show')) {
+            bsCollapse.hide();
+            chevron.style.transform = 'rotate(0deg)';
+        } else {
+            bsCollapse.show();
+            chevron.style.transform = 'rotate(90deg)';
+        }
+    }
+
+    // 全部展开
+    function expandAllSites() {
+        config.news_sites.forEach((_, index) => {
+            const body = document.getElementById(`site-body-${index}`);
+            const chevron = document.getElementById(`site-chevron-${index}`);
+            if (body) {
+                bootstrap.Collapse.getOrCreateInstance(body).show();
+                chevron.style.transform = 'rotate(90deg)';
+            }
+        });
+    }
+
+    // 全部折叠
+    function collapseAllSites() {
+        config.news_sites.forEach((_, index) => {
+            const body = document.getElementById(`site-body-${index}`);
+            const chevron = document.getElementById(`site-chevron-${index}`);
+            if (body) {
+                bootstrap.Collapse.getOrCreateInstance(body).hide();
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        });
+    }
+
+    // 更新启用状态 badge
+    function updateSiteEnabledBadge(index) {
+        const checked = document.getElementById(`site-enabled-${index}`).checked;
+        const badge = document.getElementById(`site-enabled-badge-${index}`);
+        if (checked) {
+            badge.innerHTML = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 me-2">启用</span>';
+        } else {
+            badge.innerHTML = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 me-2">禁用</span>';
+        }
     }
     
     // 切换网站类型字段显示
@@ -329,9 +413,13 @@
             date_format: '%Y-%m-%d',
             enabled: true
         };
-        
+
         config.news_sites.push(newSite);
         renderNewsSites();
+
+        // 自动展开新增的站点
+        const newIndex = config.news_sites.length - 1;
+        setTimeout(() => toggleSiteCard(newIndex), 100);
     }
     
     // 删除新闻网站
