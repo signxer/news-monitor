@@ -48,42 +48,33 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install pyinstaller -r requirements.txt
-          sudo apt-get update && sudo apt-get install -y ruby ruby-dev gcc make
-          sudo gem install fpm
+        run: pip install pyinstaller -r requirements.txt
 
       - name: Build with PyInstaller
         run: pyinstaller news_monitor.spec
 
       - name: Package as deb
         run: |
-          mkdir -p pkg/usr/local/bin
-          mkdir -p pkg/usr/lib/news-monitor
-          cp dist/news_monitor pkg/usr/lib/news-monitor/
-          cat > pkg/usr/local/bin/news-monitor << 'EOF'
-          #!/bin/sh
-          exec /usr/lib/news-monitor/news_monitor "$@"
-          EOF
-          chmod +x pkg/usr/local/bin/news-monitor
-          chmod +x pkg/usr/lib/news-monitor/news_monitor
+          VER="${TAG#v}"
+          PKGDIR="dist/news-monitor_${VER}_amd64"
+          mkdir -p "$PKGDIR/DEBIAN" "$PKGDIR/usr/local/bin" "$PKGDIR/usr/lib/news-monitor"
+          cp dist/news_monitor "$PKGDIR/usr/lib/news-monitor/"
+          printf '#!/bin/sh\nexec /usr/lib/news-monitor/news_monitor "$@"\n' > "$PKGDIR/usr/local/bin/news-monitor"
+          chmod +x "$PKGDIR/usr/local/bin/news-monitor"
+          chmod +x "$PKGDIR/usr/lib/news-monitor/news_monitor"
 
-          fpm -s dir -t deb \
-            -n news-monitor \
-            -v "${TAG#v}" \
-            --description "News Monitor - RSS and web news monitoring tool" \
-            --url "https://github.com/signxer/news-monitor" \
-            --license MIT \
-            --architecture amd64 \
-            --depends "libnss3" \
-            --depends "libatk-bridge2.0-0" \
-            --depends "libdrm2" \
-            --depends "libxcomposite1" \
-            --depends "libxdamage1" \
-            --depends "libgbm1" \
-            --depends "libgtk-3-0" \
-            -C pkg \
-            -p dist/
+          cat > "$PKGDIR/DEBIAN/control" << EOF
+          Package: news-monitor
+          Version: $VER
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Depends: libnss3, libatk-bridge2.0-0, libdrm2, libxdamage1, libgbm1, libgtk-3-0
+          Maintainer: NewsMonitor <noreply@github.com>
+          Description: News Monitor - RSS and web news monitoring tool
+          EOF
+
+          dpkg-deb --build "$PKGDIR" dist/
         env:
           TAG: ${{ github.ref_name || github.event.inputs.tag }}
 
@@ -112,29 +103,31 @@ jobs:
             ubuntu:22.04 bash -c '
             set -e
             apt-get update
-            apt-get install -y python3 python3-pip python3-venv ruby ruby-dev gcc make
+            apt-get install -y python3 python3-pip python3-venv gcc make dpkg-dev fakeroot
             pip3 install pyinstaller -r /workspace/requirements.txt
             cd /workspace
             pyinstaller news_monitor.spec
 
-            mkdir -p /tmp/pkg/usr/local/bin /tmp/pkg/usr/lib/news-monitor
-            cp dist/news_monitor /tmp/pkg/usr/lib/news-monitor/
-            printf "#!/bin/sh\nexec /usr/lib/news-monitor/news_monitor \"\$@\"\n" > /tmp/pkg/usr/local/bin/news-monitor
-            chmod +x /tmp/pkg/usr/local/bin/news-monitor
-            chmod +x /tmp/pkg/usr/lib/news-monitor/news_monitor
+            VER="${TAG#v}"
+            PKGDIR="/tmp/news-monitor_${VER}_arm64"
+            mkdir -p "$PKGDIR/DEBIAN" "$PKGDIR/usr/local/bin" "$PKGDIR/usr/lib/news-monitor"
+            cp dist/news_monitor "$PKGDIR/usr/lib/news-monitor/"
+            printf "#!/bin/sh\nexec /usr/lib/news-monitor/news_monitor \"\$@\"\n" > "$PKGDIR/usr/local/bin/news-monitor"
+            chmod +x "$PKGDIR/usr/local/bin/news-monitor"
+            chmod +x "$PKGDIR/usr/lib/news-monitor/news_monitor"
 
-            gem install fpm
-            fpm -s dir -t deb \
-              -n news-monitor \
-              -v "${TAG#v}" \
-              --description "News Monitor" \
-              --architecture arm64 \
-              --depends "libnss3" \
-              --depends "libatk-bridge2.0-0" \
-              --depends "libdrm2" \
-              --depends "libgbm1" \
-              -C /tmp/pkg \
-              -p /workspace/dist/
+            cat > "$PKGDIR/DEBIAN/control" << EOF
+            Package: news-monitor
+            Version: $VER
+            Section: utils
+            Priority: optional
+            Architecture: arm64
+            Depends: libnss3, libatk-bridge2.0-0, libdrm2, libgbm1
+            Maintainer: NewsMonitor <noreply@github.com>
+            Description: News Monitor - RSS and web news monitoring tool
+            EOF
+
+            dpkg-deb --build "$PKGDIR" /workspace/dist/
             '
 
       - name: Upload artifact
