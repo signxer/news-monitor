@@ -1290,7 +1290,7 @@ def index():
 
 @app.route('/config')
 def config_page():
-    return render_template('config.html', config=monitor.config)
+    return render_template('config.html', config=monitor.config, config_path=str(get_config_path()))
 
 @app.route('/logs')
 def logs_page():
