@@ -164,7 +164,83 @@
                 </div>
             </div>
         </div>
-        
+
+        <!-- LLM大模型筛选设置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.35s">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-robot text-warning me-2"></i>
+                    大模型筛选
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="llm-filter-enabled" {{ 'checked' if config.llm_filter.enabled }}>
+                        <label class="form-check-label fw-semibold" for="llm-filter-enabled">
+                            <i class="bi bi-robot text-warning me-1"></i>
+                            启用大模型筛选
+                        </label>
+                    </div>
+                    <div class="form-text">启用后，新闻标题将通过大模型进行语义筛选和翻译，只有相关性达到阈值的新闻才会被推送。开启此功能后，翻译将由大模型完成，无需单独配置翻译API。</div>
+                </div>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="mb-3">
+                            <label for="llm-api-url" class="form-label fw-semibold">
+                                <i class="bi bi-link-45deg text-primary me-1"></i>
+                                API地址
+                            </label>
+                            <input type="url" class="form-control" id="llm-api-url" placeholder="https://api.deepseek.com/v1/chat/completions" value="{{ config.llm_filter.api_url }}">
+                            <div class="form-text">OpenAI兼容的API地址，默认使用DeepSeek</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label for="llm-model" class="form-label fw-semibold">
+                                <i class="bi bi-cpu text-info me-1"></i>
+                                模型名称
+                            </label>
+                            <input type="text" class="form-control" id="llm-model" placeholder="deepseek-v4-flash" value="{{ config.llm_filter.model }}">
+                            <div class="form-text">默认 deepseek-v4-flash</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="llm-api-key" class="form-label fw-semibold">
+                        <i class="bi bi-key text-warning me-1"></i>
+                        API密钥
+                    </label>
+                    <input type="password" class="form-control" id="llm-api-key" placeholder="sk-..." value="{{ config.llm_filter.api_key }}">
+                    <div class="form-text">大模型服务的API密钥</div>
+                </div>
+                <div class="mb-3">
+                    <label for="llm-user-prompt" class="form-label fw-semibold">
+                        <i class="bi bi-chat-text text-success me-1"></i>
+                        用户提示词
+                    </label>
+                    <textarea class="form-control" id="llm-user-prompt" rows="4" placeholder="筛选与以下主题相关的新闻：国际经济、金融市场、科技发展、地缘政治">{{ config.llm_filter.user_prompt }}</textarea>
+                    <div class="form-text">描述你关注的新闻主题，大模型将根据此提示词判断新闻是否相关。系统会自动在后面追加新闻标题。</div>
+                </div>
+                <div class="mb-3">
+                    <label for="llm-relevance-threshold" class="form-label fw-semibold">
+                        <i class="bi bi-sliders text-danger me-1"></i>
+                        相关性阈值：<span id="threshold-display" class="badge bg-primary">{{ config.llm_filter.relevance_threshold }}</span>
+                    </label>
+                    <input type="range" class="form-range" id="llm-relevance-threshold" min="0" max="100" step="5" value="{{ config.llm_filter.relevance_threshold }}" oninput="document.getElementById('threshold-display').textContent = this.value">
+                    <div class="form-text">0-100，分数越高筛选越严格。推荐设置 50-70。</div>
+                </div>
+                <div class="mb-3">
+                    <label for="llm-max-retries" class="form-label fw-semibold">
+                        <i class="bi bi-arrow-repeat text-info me-1"></i>
+                        最大重试次数
+                    </label>
+                    <input type="number" class="form-control" id="llm-max-retries" min="0" max="10" value="{{ config.llm_filter.max_retries }}" style="max-width: 120px;">
+                    <div class="form-text">当大模型返回格式异常时自动重试。0 表示不重试，推荐设置 2-3。</div>
+                </div>
+            </div>
+        </div>
+
         <!-- 新闻网站配置 -->
         <div class="card mb-4 fade-in" style="animation-delay: 0.4s">
             <div class="card-header bg-light d-flex justify-content-between align-items-center">
@@ -202,6 +278,7 @@
             check_interval: 60,
             notification: { bark_url: '', serverchan_key: '' },
             translation: { api_key: '', api_url: '', enabled: false },
+            llm_filter: { enabled: false, api_url: 'https://api.deepseek.com/v1/chat/completions', api_key: '', model: 'deepseek-v4-flash', user_prompt: '', relevance_threshold: 60, max_retries: 2 },
             news_sites: []
         };
     }
@@ -743,6 +820,17 @@
         config.translation.enabled = document.getElementById('translation-enabled').checked;
         config.translation.api_url = document.getElementById('translation-api-url').value.trim();
         config.translation.api_key = document.getElementById('translation-api-key').value.trim();
+
+        // LLM大模型筛选设置
+        if (!config.llm_filter) config.llm_filter = {};
+        config.llm_filter.enabled = document.getElementById('llm-filter-enabled').checked;
+        config.llm_filter.api_url = document.getElementById('llm-api-url').value.trim();
+        config.llm_filter.api_key = document.getElementById('llm-api-key').value.trim();
+        config.llm_filter.model = document.getElementById('llm-model').value.trim() || 'deepseek-v4-flash';
+        config.llm_filter.user_prompt = document.getElementById('llm-user-prompt').value.trim();
+        config.llm_filter.relevance_threshold = parseInt(document.getElementById('llm-relevance-threshold').value) || 60;
+        config.llm_filter.max_retries = parseInt(document.getElementById('llm-max-retries').value);
+        if (isNaN(config.llm_filter.max_retries)) config.llm_filter.max_retries = 2;
 
         // 新闻网站设置
         config.news_sites.forEach((site, index) => {

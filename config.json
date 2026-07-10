@@ -283,5 +283,14 @@
     "api_key": "",
     "api_url": "",
     "enabled": false
+  },
+  "llm_filter": {
+    "enabled": false,
+    "api_url": "https://api.deepseek.com/v1/chat/completions",
+    "api_key": "",
+    "model": "deepseek-v4-flash",
+    "user_prompt": "筛选与以下主题相关的新闻：国际经济、金融市场、科技发展、地缘政治",
+    "relevance_threshold": 60,
+    "max_retries": 2
   }
 }

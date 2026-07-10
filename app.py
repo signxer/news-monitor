@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import json
 import time
 import threading
@@ -70,35 +71,284 @@ class NewsMonitor:
                 'enabled': False,
                 'rules': []
             },
+            'llm_filter': {
+                'enabled': False,
+                'api_url': 'https://api.deepseek.com/v1/chat/completions',
+                'api_key': '',
+                'model': 'deepseek-v4-flash',
+                'user_prompt': '筛选与以下主题相关的新闻：国际经济、金融市场、科技发展、地缘政治',
+                'relevance_threshold': 60,
+                'max_retries': 2
+            },
             'news_sites': [
                 {
-                    'name': 'BBC News',
-                    'url': 'https://www.bbc.com/news',
-                    'site_type': 'html',
-                    'title_selector': 'h3[data-testid="card-headline"]',
-                    'date_selector': 'time',
-                    'date_format': '%Y-%m-%d',
-                    'enabled': True
-                },
-                {
-                    'name': 'CNN',
-                    'url': 'https://edition.cnn.com/',
-                    'site_type': 'html',
+                    'name': 'IMF',
+                    'url': 'https://www.imf.org/en/Publications/RSS?language=eng&series=IMF%20Working%20Papers',
+                    'site_type': 'rss',
                     'title_selector': '.container__headline-text',
                     'date_selector': '.timestamp',
                     'date_format': '%Y-%m-%d',
                     'enabled': True
                 },
                 {
-                    'name': 'BBC RSS',
-                    'url': 'http://feeds.bbci.co.uk/news/rss.xml',
-                    'site_type': 'rss',
+                    'name': '世界银行',
+                    'url': 'https://documents.worldbank.org/en/publication/documents-reports/documentlist?docty_exact=Policy%2BResearch%2BWorking%2BPaper',
+                    'site_type': 'html',
+                    'title_selector': 'div.search-listing-content > h3 > a.ng-tns-c0-0',
+                    'date_selector': 'div.search-listing-content > div > span:nth-child(3)',
+                    'date_format': '%B %-d, %Y',
                     'enabled': True
                 },
                 {
-                    'name': 'Reuters RSS',
-                    'url': 'https://www.reuters.com/rssFeed/worldNews',
+                    'name': '国际清算银行-Papers',
+                    'url': 'https://www.bis.org/doclist/bispapers.rss',
                     'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '国际清算银行-Working papers',
+                    'url': 'https://www.bis.org/doclist/wppubls.rss',
+                    'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '亚洲开发银行',
+                    'url': 'https://www.adb.org/publications/series/economics-working-papers',
+                    'site_type': 'html',
+                    'title_selector': 'li.clearfix > a',
+                    'date_selector': 'time',
+                    'date_format': '%d %b %Y',
+                    'enabled': True
+                },
+                {
+                    'name': '亚太经合组织',
+                    'url': 'https://www.apec.org/publications/listings?keyword=&publicationTitle=&publicationNumber=&group=&publicationType=&dateFrom=&dateTo=&page=1',
+                    'site_type': 'html',
+                    'title_selector': 'div.eyd-card-publication__text > h3',
+                    'date_selector': 'span.eyd-card-publication__date > span.eyd-card-publication__meta__text',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美联储-feds',
+                    'url': 'https://www.federalreserve.gov/feeds/feds.xml',
+                    'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美联储-feds_notes',
+                    'url': 'https://www.federalreserve.gov/feeds/feds_notes.xml',
+                    'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美联储-ifdp',
+                    'url': 'https://www.federalreserve.gov/feeds/ifdp.xml',
+                    'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': 'Hoover',
+                    'url': 'https://www.hoover.org/research/type/working-papers',
+                    'site_type': 'html',
+                    'title_selector': 'div > div.content > h6',
+                    'date_selector': 'span.date',
+                    'date_format': '%B %-d, %Y',
+                    'enabled': True
+                },
+                {
+                    'name': '欧洲央行',
+                    'url': 'https://www.ecb.europa.eu/press/research-publications/working-papers/html/index.en.html',
+                    'site_type': 'html',
+                    'title_selector': 'div.title > a',
+                    'date_selector': 'dt > div.date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国布鲁金斯学会',
+                    'url': 'https://www.brookings.edu/programs/economic-studies/explore-research-and-commentary/',
+                    'site_type': 'html',
+                    'title_selector': 'article > a > span',
+                    'date_selector': 'p.date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国经济研究局',
+                    'url': 'https://www.nber.org/papers?page=1&perPage=50&sortBy=public_date',
+                    'site_type': 'html',
+                    'title_selector': 'div.digest-card__title > a',
+                    'date_selector': 'div.digest-card__date > span:nth-child(1)',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '彼得森研究所（PIIE）',
+                    'url': 'https://www.piie.com/publications/working-papers',
+                    'site_type': 'html',
+                    'title_selector': 'h2.teaser__title > a',
+                    'date_selector': 'p.teaser__date > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                {
+                    'name': '哈德逊研究所',
+                    'url': 'https://www.hudson.org/search?hud-content-type=258&expert=&date-from=&date-to=&keywords=&topics=All&region=All',
+                    'site_type': 'html',
+                    'title_selector': 'a.c-horizontal-card__title > span',
+                    'date_selector': 'div.c-horizontal-card__meta > div.c-horizontal-card__date > div > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '布鲁盖尔研究所',
+                    'url': 'https://www.bruegel.org/publications/working-papers',
+                    'site_type': 'html',
+                    'title_selector': 'h2.c-list-item__title > a > span',
+                    'date_selector': 'p.c-list-item__date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '法国央行',
+                    'url': 'https://www.banque-france.fr/en/publications-and-statistics/publications',
+                    'site_type': 'html',
+                    'title_selector': 'span.title-truncation',
+                    'date_selector': 'div.card-body.py-4.px-5.d-flex.flex-column > small',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '日本央行',
+                    'url': 'https://www.boj.or.jp/en/research/wps_rev/index.htm',
+                    'site_type': 'html',
+                    'title_selector': 'tbody > tr > td:nth-child(4)',
+                    'date_selector': 'tbody > tr > td:nth-child(2)',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '加拿大央行',
+                    'url': 'https://www.bankofcanada.ca/feed/?content_type=working-papers&post_type%5B0%5D=post&post_type%5B1%5D=page',
+                    'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国企业研究所',
+                    'url': 'https://www.aei.org/feed/',
+                    'site_type': 'rss',
+                    'title_selector': 'h3[data-testid=',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '金融稳定委员会（FSB）',
+                    'url': 'https://www.fsb.org/publications/',
+                    'site_type': 'html',
+                    'title_selector': 'div.post-title > h3 > a',
+                    'date_selector': 'div.post-date > span',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '经济合作与发展组织（OECD）',
+                    'url': 'https://www.oecd.org/en/publications/reports.html?orderBy=mostRelevant&page=0',
+                    'site_type': 'html',
+                    'title_selector': 'article > div.search-result-list-item__title > a',
+                    'date_selector': 'article > div.search-result-list-item__meta > span.search-result-list-item__date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '联合国贸易和发展会议（UNCTAD）',
+                    'url': 'https://unctad.org/publications-search?f%5B0%5D=product%3A389',
+                    'site_type': 'html',
+                    'title_selector': 'div.title > a',
+                    'date_selector': 'div.publisheddate > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                {
+                    'name': '香港金融学院（HKIMR）',
+                    'url': 'https://www.aof.org.hk/research/HKIMR/publications-and-research/working-papers',
+                    'site_type': 'html',
+                    'title_selector': 'div.mbm.papertitle',
+                    'date_selector': 'div.mbm.papertitle',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '哈佛商学院',
+                    'url': 'https://www.library.hbs.edu/working-knowledge/collections/finance-and-investing',
+                    'site_type': 'html',
+                    'title_selector': 'h2.hbs-article-tease__title hbs-text-h2 > a',
+                    'date_selector': 'div.hbs-article-tease__meta > div > p > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '国际金融协会（IIF）-Debt',
+                    'url': 'https://www.iif.com/Key-Topics/Debt',
+                    'site_type': 'html',
+                    'title_selector': 'h4.article--title > a',
+                    'date_selector': 'span.article--date > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '国际金融协会（IIF）-Sustainable-Finance',
+                    'url': 'https://www.iif.com/Key-Topics/Sustainable-Finance',
+                    'site_type': 'html',
+                    'title_selector': 'h4.article--title > a',
+                    'date_selector': 'span.article--date > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '国际金融协会（IIF）-Digital-Finance',
+                    'url': 'https://www.iif.com/Key-Topics/Digital-Finance',
+                    'site_type': 'html',
+                    'title_selector': 'h4.article--title > a',
+                    'date_selector': 'span.article--date > time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '牛津经济研究院',
+                    'url': 'https://www.oxfordeconomics.com/resource-hub/',
+                    'site_type': 'html',
+                    'title_selector': 'div.wpgb-card-body > div > div > h3 > a',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '穆迪',
+                    'url': 'https://www.moodys.com/web/en/us/insights.html',
+                    'site_type': 'html',
+                    'title_selector': 'div.card-content > h3 > a',
+                    'date_selector': 'div.card-content > div > span.date',
+                    'date_format': '%Y-%m-%d',
                     'enabled': True
                 }
             ]
@@ -130,7 +380,13 @@ class NewsMonitor:
                     if 'serverchan_key' in notification and notification['serverchan_key']:
                         if notification['serverchan_key'] not in notification['serverchan_keys']:
                             notification['serverchan_keys'].append(notification['serverchan_key'])
-                
+
+                # 向后兼容：补全 llm_filter 缺失字段
+                if 'llm_filter' in config:
+                    for k, v in default_config['llm_filter'].items():
+                        if k not in config['llm_filter']:
+                            config['llm_filter'][k] = v
+
                 return config
         except FileNotFoundError:
             self.save_config(default_config)
@@ -264,6 +520,97 @@ class NewsMonitor:
                 return True
 
         return False
+
+    def llm_filter_news(self, news_items):
+        """使用大模型筛选新闻并翻译
+
+        调用 LLM API（OpenAI 兼容格式）判断每条新闻与用户主题的相关性，
+        并同时获取中文翻译。只有相关性分数 >= 阈值的新闻才会通过筛选。
+        API 调用失败或返回格式异常时自动重试，所有重试均失败后保留该条新闻。
+        """
+        llm_config = self.config.get('llm_filter', {})
+        if not llm_config.get('enabled', False):
+            return news_items
+
+        api_url = llm_config.get('api_url', '')
+        api_key = llm_config.get('api_key', '')
+        model = llm_config.get('model', 'deepseek-v4-flash')
+        user_prompt = llm_config.get('user_prompt', '')
+        threshold = llm_config.get('relevance_threshold', 60)
+        max_retries = llm_config.get('max_retries', 2)
+
+        if not api_key:
+            logger.warning("LLM筛选已启用但未配置API密钥，跳过筛选")
+            return news_items
+
+        system_prompt = (
+            '你是一个新闻筛选和翻译助手。请根据用户提供的筛选主题，判断新闻标题的相关性，并提供翻译。'
+            '请严格以以下JSON格式返回，不要包含任何其他内容：'
+            '{"relevance": <0-100的整数，表示与筛选主题的相关性>,'
+            '"reason": "<简短的相关性判断理由，中文>",'
+            '"translation": "<标题的中文翻译>"}'
+        )
+
+        filtered = []
+        for item in news_items:
+            title = item.get('title', '')
+            if not title:
+                continue
+
+            success = False
+            for attempt in range(1, max_retries + 1):
+                try:
+                    full_user_prompt = f"{user_prompt}\n\n新闻标题：{title}"
+                    response = requests.post(
+                        api_url,
+                        headers={
+                            'Content-Type': 'application/json',
+                            'Authorization': f'Bearer {api_key}'
+                        },
+                        json={
+                            'model': model,
+                            'messages': [
+                                {'role': 'system', 'content': system_prompt},
+                                {'role': 'user', 'content': full_user_prompt}
+                            ],
+                            'temperature': 0.1,
+                            'max_tokens': 256
+                        },
+                        timeout=30
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result['choices'][0]['message']['content']
+                        json_match = re.search(r'\{[^}]+\}', content)
+                        if json_match:
+                            llm_result = json.loads(json_match.group())
+                            relevance = llm_result.get('relevance', 0)
+                            if relevance >= threshold:
+                                item['translated_title'] = llm_result.get('translation', item.get('translated_title', title))
+                                item['llm_relevance'] = relevance
+                                item['llm_reason'] = llm_result.get('reason', '')
+                                filtered.append(item)
+                                logger.info(f"LLM筛选通过: [{relevance}分] {title}")
+                            else:
+                                logger.info(f"LLM筛选过滤: [{relevance}分] {title}")
+                            success = True
+                            break
+                        else:
+                            logger.warning(f"LLM返回格式异常(第{attempt}次): {content}")
+                    else:
+                        logger.error(f"LLM API请求失败(第{attempt}次): {response.status_code}")
+                except Exception as e:
+                    logger.error(f"LLM筛选异常(第{attempt}次): {str(e)}")
+
+                # 未成功且还有重试机会，短暂等待后重试
+                if attempt < max_retries:
+                    time.sleep(1)
+
+            if not success:
+                logger.warning(f"LLM筛选{max_retries}次重试均失败，保留新闻: {title}")
+                filtered.append(item)
+
+        return filtered
 
     def scrape_rss_site(self, site_config):
         """抓取RSS新闻网站"""
@@ -817,11 +1164,17 @@ class NewsMonitor:
                 # 关键词筛选
                 filtered_news = [n for n in new_news_list if self.match_keyword_rules(n)]
 
+                # LLM大模型筛选
+                if filtered_news and self.config.get('llm_filter', {}).get('enabled', False):
+                    logger.info(f"开始LLM大模型筛选，共 {len(filtered_news)} 条待筛选")
+                    filtered_news = self.llm_filter_news(filtered_news)
+                    logger.info(f"LLM筛选后剩余 {len(filtered_news)} 条新闻")
+
                 if filtered_news:
-                    logger.info(f"{len(filtered_news)} 条新闻匹配关键词规则，开始推送")
+                    logger.info(f"{len(filtered_news)} 条新闻通过筛选，开始推送")
                     self.send_notification_with_details(filtered_news)
                 else:
-                    logger.info(f"共 {new_count} 条新新闻，但无匹配关键词规则，跳过推送")
+                    logger.info(f"共 {new_count} 条新新闻，但无通过筛选的新闻，跳过推送")
             else:
                 logger.info("没有发现新新闻")
                 
