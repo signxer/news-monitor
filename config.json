@@ -277,7 +277,17 @@
     "bark_url": "",
     "bark_urls": [],
     "serverchan_key": "",
-    "serverchan_keys": []
+    "serverchan_keys": [],
+    "email": {
+      "enabled": false,
+      "smtp_server": "",
+      "smtp_port": 465,
+      "use_ssl": true,
+      "username": "",
+      "password": "",
+      "from_address": "",
+      "to_addresses": []
+    }
   },
   "translation": {
     "api_key": "",

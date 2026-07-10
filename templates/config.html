@@ -91,9 +91,100 @@
                         </div>
                     </div>
                 </div>
+                <hr>
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="email-enabled">
+                        <label class="form-check-label fw-semibold" for="email-enabled">
+                            <i class="bi bi-envelope text-primary me-1"></i>
+                            启用邮件通知
+                        </label>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="email-smtp-server" class="form-label fw-semibold">
+                                <i class="bi bi-server text-primary me-1"></i>
+                                SMTP服务器
+                            </label>
+                            <input type="text" class="form-control" id="email-smtp-server" placeholder="smtp.gmail.com">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label for="email-smtp-port" class="form-label fw-semibold">
+                                <i class="bi bi-hash text-primary me-1"></i>
+                                端口
+                            </label>
+                            <input type="number" class="form-control" id="email-smtp-port" placeholder="465" value="465">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-shield-lock text-primary me-1"></i>
+                                加密方式
+                            </label>
+                            <select class="form-select" id="email-use-ssl">
+                                <option value="true" selected>SSL</option>
+                                <option value="false">STARTTLS</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="email-username" class="form-label fw-semibold">
+                                <i class="bi bi-person text-primary me-1"></i>
+                                用户名
+                            </label>
+                            <input type="text" class="form-control" id="email-username" placeholder="your@email.com">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="email-password" class="form-label fw-semibold">
+                                <i class="bi bi-key text-warning me-1"></i>
+                                密码/应用专用密码
+                            </label>
+                            <input type="password" class="form-control" id="email-password" placeholder="••••••••">
+                            <div class="form-text">Gmail等需使用应用专用密码，非登录密码</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="email-from" class="form-label fw-semibold">
+                                <i class="bi bi-send text-primary me-1"></i>
+                                发件人地址
+                            </label>
+                            <input type="email" class="form-control" id="email-from" placeholder="留空则使用用户名">
+                            <div class="form-text">留空则默认使用用户名作为发件人</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-semibold mb-0">
+                                    <i class="bi bi-inbox text-success me-1"></i>
+                                    收件人邮箱
+                                </label>
+                                <button type="button" class="btn btn-outline-success btn-sm" onclick="addEmailRecipient()">
+                                    <i class="bi bi-plus"></i> 添加
+                                </button>
+                            </div>
+                            <div id="email-to-container">
+                                <!-- 收件人将在这里动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-        
+
         <!-- 关键词筛选设置 -->
         <div class="card mb-4 fade-in" style="animation-delay: 0.3s">
             <div class="card-header bg-light">
@@ -276,7 +367,7 @@
         console.error('Failed to load config:', e);
         config = {
             check_interval: 60,
-            notification: { bark_url: '', serverchan_key: '' },
+            notification: { bark_url: '', serverchan_key: '', email: { enabled: false, smtp_server: '', smtp_port: 465, use_ssl: true, username: '', password: '', from_address: '', to_addresses: [] } },
             translation: { api_key: '', api_url: '', enabled: false },
             llm_filter: { enabled: false, api_url: 'https://api.deepseek.com/v1/chat/completions', api_key: '', model: 'deepseek-v4-flash', user_prompt: '', relevance_threshold: 60, max_retries: 2 },
             news_sites: []
@@ -677,6 +768,7 @@
         
         renderBarkUrls();
         renderServerchanKeys();
+        initEmailUI();
     }
     
     // 渲染Bark URL列表
@@ -772,7 +864,86 @@
         }
         renderServerchanKeys();
     }
-    
+
+    // 初始化邮件通知UI
+    function initEmailUI() {
+        if (!config.notification.email) {
+            config.notification.email = { enabled: false, smtp_server: '', smtp_port: 465, use_ssl: true, username: '', password: '', from_address: '', to_addresses: [] };
+        }
+        const email = config.notification.email;
+        document.getElementById('email-enabled').checked = email.enabled || false;
+        document.getElementById('email-smtp-server').value = email.smtp_server || '';
+        document.getElementById('email-smtp-port').value = email.smtp_port || 465;
+        document.getElementById('email-use-ssl').value = email.use_ssl !== false ? 'true' : 'false';
+        document.getElementById('email-username').value = email.username || '';
+        document.getElementById('email-password').value = email.password || '';
+        document.getElementById('email-from').value = email.from_address || '';
+        renderEmailRecipients();
+    }
+
+    // 渲染收件人列表
+    function renderEmailRecipients() {
+        const container = document.getElementById('email-to-container');
+        const addresses = (config.notification.email && config.notification.email.to_addresses) || [];
+        let html = '';
+        addresses.forEach((addr, index) => {
+            html += `
+                <div class="input-group mb-2" id="email-to-${index}">
+                    <input type="email" class="form-control" value="${escapeHtml(addr)}" placeholder="recipient@example.com">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeEmailRecipient(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+        if (addresses.length === 0) {
+            html = `
+                <div class="input-group mb-2" id="email-to-0">
+                    <input type="email" class="form-control" value="" placeholder="recipient@example.com">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeEmailRecipient(0)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+    }
+
+    // 添加收件人
+    function addEmailRecipient() {
+        if (!config.notification.email) {
+            config.notification.email = { enabled: false, smtp_server: '', smtp_port: 465, use_ssl: true, username: '', password: '', from_address: '', to_addresses: [] };
+        }
+        if (!config.notification.email.to_addresses) {
+            config.notification.email.to_addresses = [];
+        }
+        // 先保存当前输入框中的值
+        const container = document.getElementById('email-to-container');
+        const inputs = container.querySelectorAll('input[type="email"]');
+        config.notification.email.to_addresses = [];
+        inputs.forEach(input => {
+            const val = input.value.trim();
+            if (val) config.notification.email.to_addresses.push(val);
+        });
+        config.notification.email.to_addresses.push('');
+        renderEmailRecipients();
+    }
+
+    // 删除收件人
+    function removeEmailRecipient(index) {
+        const container = document.getElementById('email-to-container');
+        const inputs = container.querySelectorAll('input[type="email"]');
+        const addresses = [];
+        inputs.forEach((input, i) => {
+            if (i !== index) {
+                const val = input.value.trim();
+                if (val) addresses.push(val);
+            }
+        });
+        config.notification.email.to_addresses = addresses;
+        renderEmailRecipients();
+    }
+
     // 收集表单数据
     function collectFormData() {
         // 基本设置
@@ -803,7 +974,24 @@
         // 向后兼容：设置第一个地址为单个配置
         config.notification.bark_url = config.notification.bark_urls.length > 0 ? config.notification.bark_urls[0] : '';
         config.notification.serverchan_key = config.notification.serverchan_keys.length > 0 ? config.notification.serverchan_keys[0] : '';
-        
+
+        // 收集邮件配置
+        if (!config.notification.email) config.notification.email = {};
+        config.notification.email.enabled = document.getElementById('email-enabled').checked;
+        config.notification.email.smtp_server = document.getElementById('email-smtp-server').value.trim();
+        config.notification.email.smtp_port = parseInt(document.getElementById('email-smtp-port').value) || 465;
+        config.notification.email.use_ssl = document.getElementById('email-use-ssl').value === 'true';
+        config.notification.email.username = document.getElementById('email-username').value.trim();
+        config.notification.email.password = document.getElementById('email-password').value;
+        config.notification.email.from_address = document.getElementById('email-from').value.trim();
+        config.notification.email.to_addresses = [];
+        const emailContainer = document.getElementById('email-to-container');
+        const emailInputs = emailContainer.querySelectorAll('input[type="email"]');
+        emailInputs.forEach(input => {
+            const addr = input.value.trim();
+            if (addr) config.notification.email.to_addresses.push(addr);
+        });
+
         // 关键词筛选设置
         config.keyword_filters.enabled = document.getElementById('keyword-filters-enabled').checked;
         // 从 DOM 更新每条规则的 name 和 enabled，keywords/mode 已在操作时直接更新到 config

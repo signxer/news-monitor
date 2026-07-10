@@ -60,7 +60,17 @@ class NewsMonitor:
                 'serverchan_keys': [],  # 支持多个Server酱密钥
                 # 保持向后兼容
                 'bark_url': '',
-                'serverchan_key': ''
+                'serverchan_key': '',
+                'email': {
+                    'enabled': False,
+                    'smtp_server': '',
+                    'smtp_port': 465,
+                    'use_ssl': True,
+                    'username': '',
+                    'password': '',
+                    'from_address': '',
+                    'to_addresses': []
+                }
             },
             'translation': {
                 'api_key': '',
@@ -380,6 +390,14 @@ class NewsMonitor:
                     if 'serverchan_key' in notification and notification['serverchan_key']:
                         if notification['serverchan_key'] not in notification['serverchan_keys']:
                             notification['serverchan_keys'].append(notification['serverchan_key'])
+
+                    # 处理邮件配置
+                    if 'email' not in notification:
+                        notification['email'] = default_config['notification']['email']
+                    else:
+                        for k, v in default_config['notification']['email'].items():
+                            if k not in notification['email']:
+                                notification['email'][k] = v
 
                 # 向后兼容：补全 llm_filter 缺失字段
                 if 'llm_filter' in config:
@@ -1084,7 +1102,71 @@ class NewsMonitor:
                         logger.warning(f"Server酱详细通知发送失败，状态码: {response.status_code}, 密钥: {serverchan_key}")
                 except Exception as e:
                     logger.error(f"Server酱详细通知发送失败: {serverchan_key}, 错误: {str(e)}")
-    
+
+        # 发送邮件通知
+        email_config = notification_config.get('email', {})
+        if email_config.get('enabled', False):
+            smtp_server = email_config.get('smtp_server', '')
+            smtp_port = email_config.get('smtp_port', 465)
+            use_ssl = email_config.get('use_ssl', True)
+            username = email_config.get('username', '')
+            password = email_config.get('password', '')
+            from_address = email_config.get('from_address', '') or username
+            to_addresses = email_config.get('to_addresses', [])
+
+            if smtp_server and username and password and to_addresses:
+                try:
+                    import smtplib
+                    from email.mime.text import MIMEText
+                    from email.mime.multipart import MIMEMultipart
+
+                    msg = MIMEMultipart('alternative')
+                    msg['Subject'] = f'📰 新闻更新通知 ({len(new_news_list)}条)'
+                    msg['From'] = from_address
+                    msg['To'] = ', '.join(to_addresses)
+
+                    # 纯文本内容
+                    msg.attach(MIMEText(message, 'plain', 'utf-8'))
+
+                    # HTML 内容
+                    html_lines = ['<html><body style="font-family: sans-serif; padding: 20px;">']
+                    html_lines.append(f'<h2>📰 发现 {len(new_news_list)} 条新新闻</h2>')
+                    for i, news in enumerate(new_news_list[:10], 1):
+                        site_name = news.get('site_name', '未知来源')
+                        title = news.get('title', '无标题')
+                        translated_title = news.get('translated_title', '')
+                        url = news.get('url', '')
+                        llm_reason = news.get('llm_reason', '')
+                        html_lines.append(f'<div style="margin-bottom:16px;padding:12px;background:#f8f9fa;border-radius:8px;border-left:4px solid #0d6efd;">')
+                        html_lines.append(f'<div style="color:#666;font-size:13px;margin-bottom:4px;">{i}. 【{site_name}】</div>')
+                        if url:
+                            html_lines.append(f'<a href="{url}" style="color:#0d6efd;text-decoration:none;font-weight:bold;font-size:15px;">{title}</a>')
+                        else:
+                            html_lines.append(f'<div style="font-weight:bold;font-size:15px;">{title}</div>')
+                        if translated_title and translated_title != title:
+                            html_lines.append(f'<div style="color:#333;margin-top:4px;">{translated_title}</div>')
+                        if llm_reason:
+                            html_lines.append(f'<div style="color:#888;font-size:12px;margin-top:4px;">🤖 {llm_reason}</div>')
+                        html_lines.append('</div>')
+                    if len(new_news_list) > 10:
+                        html_lines.append(f'<p style="color:#666;">... 还有 {len(new_news_list) - 10} 条新闻</p>')
+                    html_lines.append('</body></html>')
+                    msg.attach(MIMEText('\n'.join(html_lines), 'html', 'utf-8'))
+
+                    if use_ssl:
+                        server = smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=15)
+                    else:
+                        server = smtplib.SMTP(smtp_server, smtp_port, timeout=15)
+                        server.starttls()
+                    server.login(username, password)
+                    server.sendmail(from_address, to_addresses, msg.as_string())
+                    server.quit()
+                    logger.info(f"邮件通知发送成功: {', '.join(to_addresses)}")
+                except Exception as e:
+                    logger.error(f"邮件通知发送失败: {str(e)}")
+            else:
+                logger.warning("邮件配置不完整，跳过发送")
+
     def clean_log_file(self):
         """清理日志文件，保留最近的日志内容"""
         try:
