@@ -70,7 +70,7 @@
                             <div id="bark-urls-container">
                                 <!-- Bark URLs will be dynamically added here -->
                             </div>
-                            <div class="form-text">Bark推送服务的完整URL，支持配置多个地址</div>
+                            <div class="form-text">格式：<code>https://api.day.app/你的KEY</code>，末尾不加斜线，支持多个</div>
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -181,6 +181,13 @@
                             </div>
                         </div>
                     </div>
+                </div>
+                <hr>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="testNotification()">
+                        <i class="bi bi-send-check me-1"></i> 测试推送
+                    </button>
+                    <span id="test-notification-result" class="small"></span>
                 </div>
             </div>
         </div>
@@ -924,6 +931,25 @@
     }
 
     // 添加收件人
+    // 测试推送
+    function testNotification() {
+        const resultEl = document.getElementById('test-notification-result');
+        resultEl.innerHTML = '<span class="text-muted"><i class="bi bi-hourglass-split"></i> 发送中...</span>';
+        fetch('/api/test_notification', { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    resultEl.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${data.message}</span>`;
+                } else {
+                    resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> ${data.message}</span>`;
+                }
+            })
+            .catch(err => {
+                resultEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> 请求失败: ${err.message}</span>`;
+            });
+        setTimeout(() => { resultEl.innerHTML = ''; }, 8000);
+    }
+
     function addEmailRecipient() {
         if (!config.notification.email) {
             config.notification.email = { enabled: false, smtp_server: '', smtp_port: 465, use_ssl: true, username: '', password: '', from_address: '', to_addresses: [] };
