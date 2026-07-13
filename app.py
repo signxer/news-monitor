@@ -585,6 +585,106 @@ class NewsMonitor:
                     'date_selector': '',
                     'date_format': '%Y-%m-%d',
                     'enabled': False
+                },
+                # ===== 新增：Agent Reach 搜索确认 =====
+                {
+                    'name': '摩根士丹利',
+                    'url': 'https://www.morganstanley.com/press-releases.msfeed.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '中国与全球化智库（CCG）',
+                    'url': 'https://www.ccgupdate.org/feed',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国商务部',
+                    'url': 'https://www.commerce.gov/feeds/news',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国贸易代表办公室（USTR）',
+                    'url': 'https://ustr.gov/about-us/policy-offices/press-office/press-releases',
+                    'site_type': 'html',
+                    'title_selector': 'a.usa-link',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国际贸易委员会（USITC）',
+                    'url': 'https://www.usitc.gov/staff_publications/all',
+                    'site_type': 'html',
+                    'title_selector': 'td.views-field-title a',
+                    'date_selector': 'td.views-field-created',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '中美经济与安全审查委员会（USCC）',
+                    'url': 'https://www.uscc.gov/research',
+                    'site_type': 'html',
+                    'title_selector': 'div.views-row a',
+                    'date_selector': 'span.date-display-single',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美中贸易全国委员会（USCBC）',
+                    'url': 'https://www.uschina.org/research-analysis/',
+                    'site_type': 'html',
+                    'title_selector': 'h3 a',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国亚洲研究局（NBR）',
+                    'url': 'https://www.nbr.org/publications/',
+                    'site_type': 'html',
+                    'title_selector': 'h3 a',
+                    'date_selector': 'span.date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '中国欧盟商会',
+                    'url': 'https://www.europeanchamber.com.cn/en/publications-archive',
+                    'site_type': 'html',
+                    'title_selector': 'td a',
+                    'date_selector': 'td.views-field-created',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '上海美国商会',
+                    'url': 'https://www.amcham-shanghai.org/en/resources/publications',
+                    'site_type': 'html',
+                    'title_selector': 'h3 a',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': 'CEPR VoxEU',
+                    'url': 'https://cepr.org/rss/vox-content',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
                 }
             ]
         }
