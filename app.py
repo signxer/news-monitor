@@ -364,6 +364,227 @@ class NewsMonitor:
                     'date_selector': 'div.card-content > div > span.date',
                     'date_format': '%Y-%m-%d',
                     'enabled': True
+                },
+                # ===== 国际组织（新增） =====
+                {
+                    'name': '世界贸易组织（WTO）',
+                    'url': 'https://www.wto.org/library/rss/latest_news_e.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '东盟与中日韩宏观经济研究办公室（AMRO）',
+                    'url': 'https://amro-asia.org/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '世界经济论坛（WEF）',
+                    'url': 'https://www.weforum.org/publications/',
+                    'site_type': 'html',
+                    'title_selector': 'a.article-card__title',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                {
+                    'name': '国际货币金融机构官方论坛（OMFIF）',
+                    'url': 'https://www.omfif.org/publications/',
+                    'site_type': 'html',
+                    'title_selector': 'h3.entry-title > a',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                # ===== 央行（新增） =====
+                {
+                    'name': '英格兰银行',
+                    'url': 'https://www.bankofengland.co.uk/rss/publications',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                # ===== 政府机构 =====
+                {
+                    'name': '欧盟委员会',
+                    'url': 'https://ec.europa.eu/commission/presscorner/api/rss',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国白宫',
+                    'url': 'https://www.whitehouse.gov/remarks/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国会',
+                    'url': 'https://www.govinfo.gov/rss/bills.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国财政部',
+                    'url': 'https://home.treasury.gov/news/press-releases',
+                    'site_type': 'html',
+                    'title_selector': 'a.usa-link',
+                    'date_selector': 'time',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国战略与国际研究中心（CSIS）',
+                    'url': 'https://www.csis.org/analysis',
+                    'site_type': 'html',
+                    'title_selector': 'h3 > a',
+                    'date_selector': 'span.date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '瑞士洛桑管理发展学院（IMD）',
+                    'url': 'https://www.imd.org/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                # ===== 智库及其他 =====
+                {
+                    'name': '荣鼎咨询（Rhodium Group）',
+                    'url': 'https://rhg.com/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '兰德智库（RAND）',
+                    'url': 'https://www.rand.org/pubs/research_reports.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '大西洋理事会（Atlantic Council）',
+                    'url': 'https://www.atlanticcouncil.org/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '米尔肯研究所（Milken Institute）',
+                    'url': 'https://www.milkeninstitute.org/content-hub',
+                    'site_type': 'html',
+                    'title_selector': 'a.card__title',
+                    'date_selector': 'span.card__date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '彭博-经济',
+                    'url': 'https://feeds.bloomberg.com/economics/news.rss',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '华尔街日报-全球新闻',
+                    'url': 'https://feeds.a.dj.com/rss/RSSWorldNews.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '英国商会中国（BritCham）',
+                    'url': 'https://www.britishchamber.cn/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                # ===== 反爬较严或需要特殊处理，暂时禁用 =====
+                {
+                    'name': '美国企业研究所（AEI）-经济',
+                    'url': 'https://www.aei.org/feed/?cat=economics',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国民经济研究局（NBER）-新论文',
+                    'url': 'https://www.nber.org/rss/new.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '经济学人-金融与经济',
+                    'url': 'https://www.economist.com/finance-and-economics/rss.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                {
+                    'name': '路透社-商业',
+                    'url': 'https://www.reuters.com/arc/outboundfeeds/rss/category/business/?outputType=xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                {
+                    'name': '外交事务（Foreign Affairs）',
+                    'url': 'https://www.foreignaffairs.com/rss.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
+                },
+                {
+                    'name': '金融时报（FT）',
+                    'url': 'https://www.ft.com/rss/home',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': False
                 }
             ]
         }
