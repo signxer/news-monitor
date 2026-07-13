@@ -45,7 +45,57 @@
                 </div>
             </div>
         </div>
-        
+
+        <!-- 推送模式设置 -->
+        <div class="card mb-4 fade-in" style="animation-delay: 0.15s">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">
+                    <i class="bi bi-send text-danger me-2"></i>
+                    推送模式
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="push-mode" id="push-mode-immediate" value="immediate" checked onchange="togglePushMode()">
+                        <label class="form-check-label fw-semibold" for="push-mode-immediate">
+                            <i class="bi bi-lightning text-warning me-1"></i>
+                            立即推送
+                        </label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="push-mode" id="push-mode-scheduled" value="scheduled" onchange="togglePushMode()">
+                        <label class="form-check-label fw-semibold" for="push-mode-scheduled">
+                            <i class="bi bi-clock-history text-info me-1"></i>
+                            定时推送
+                        </label>
+                    </div>
+                    <div class="form-text">立即推送：发现新新闻后立刻推送。定时推送：新闻先攒起来，到设定时间统一推送。</div>
+                </div>
+                <div id="scheduled-times-section" style="display: none;">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-semibold mb-0">
+                                <i class="bi bi-alarm text-primary me-1"></i>
+                                推送时间点
+                            </label>
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="addScheduledTime()">
+                                <i class="bi bi-plus"></i> 添加时间
+                            </button>
+                        </div>
+                        <div id="scheduled-times-container">
+                            <!-- 时间点将在这里动态生成 -->
+                        </div>
+                        <div class="form-text">设置每天的推送时间，格式 HH:MM（如 09:00、18:00）</div>
+                    </div>
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>定时推送模式说明：</strong>新闻检查仍按上方设置的间隔定时运行，但检查到的新闻会先存入队列。到达推送时间后，系统会将队列中所有新闻汇总为一份文章列表统一推送，包含中英文标题和链接。
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 通知设置 -->
         <div class="card mb-4 fade-in" style="animation-delay: 0.2s">
             <div class="card-header bg-light">
@@ -767,6 +817,82 @@
         renderKeywordRules();
     }
 
+    // ========== 推送模式设置 ==========
+
+    // 初始化推送模式UI
+    function initPushModeUI() {
+        if (!config.push) {
+            config.push = { mode: 'immediate', scheduled_times: ['09:00', '18:00'] };
+        }
+        const mode = config.push.mode || 'immediate';
+        document.getElementById('push-mode-immediate').checked = mode === 'immediate';
+        document.getElementById('push-mode-scheduled').checked = mode === 'scheduled';
+        togglePushMode();
+        renderScheduledTimes();
+    }
+
+    // 切换推送模式显示
+    function togglePushMode() {
+        const isScheduled = document.getElementById('push-mode-scheduled').checked;
+        document.getElementById('scheduled-times-section').style.display = isScheduled ? 'block' : 'none';
+    }
+
+    // 渲染定时推送时间列表
+    function renderScheduledTimes() {
+        const container = document.getElementById('scheduled-times-container');
+        const times = (config.push && config.push.scheduled_times) || [];
+        let html = '';
+
+        times.forEach((time, index) => {
+            html += `
+                <div class="input-group mb-2" id="scheduled-time-${index}">
+                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
+                    <input type="time" class="form-control" value="${escapeHtml(time)}" style="max-width: 150px;">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeScheduledTime(${index})">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        });
+
+        if (times.length === 0) {
+            html = `
+                <div class="input-group mb-2" id="scheduled-time-0">
+                    <span class="input-group-text"><i class="bi bi-clock"></i></span>
+                    <input type="time" class="form-control" value="09:00" style="max-width: 150px;">
+                    <button class="btn btn-outline-danger" type="button" onclick="removeScheduledTime(0)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // 添加定时推送时间
+    function addScheduledTime() {
+        if (!config.push) {
+            config.push = { mode: 'immediate', scheduled_times: [] };
+        }
+        if (!config.push.scheduled_times) {
+            config.push.scheduled_times = [];
+        }
+        config.push.scheduled_times.push('12:00');
+        renderScheduledTimes();
+    }
+
+    // 删除定时推送时间
+    function removeScheduledTime(index) {
+        if (!config.push || !config.push.scheduled_times) return;
+        if (config.push.scheduled_times.length > 1) {
+            config.push.scheduled_times.splice(index, 1);
+        } else {
+            config.push.scheduled_times[0] = '09:00';
+        }
+        renderScheduledTimes();
+    }
+
     // ========== 通知设置 ==========
 
     // 初始化通知配置UI
@@ -988,6 +1114,17 @@
     function collectFormData() {
         // 基本设置
         config.check_interval = parseInt(document.getElementById('check-interval').value);
+
+        // 推送模式设置
+        if (!config.push) config.push = {};
+        config.push.mode = document.getElementById('push-mode-scheduled').checked ? 'scheduled' : 'immediate';
+        config.push.scheduled_times = [];
+        const timeContainer = document.getElementById('scheduled-times-container');
+        const timeInputs = timeContainer.querySelectorAll('input[type="time"]');
+        timeInputs.forEach(input => {
+            const val = input.value;
+            if (val) config.push.scheduled_times.push(val);
+        });
         
         // 收集Bark URLs
         config.notification.bark_urls = [];
@@ -1116,6 +1253,7 @@
     
     // 页面加载时初始化
     document.addEventListener('DOMContentLoaded', function() {
+        initPushModeUI();
         initNotificationUI();
         initKeywordFiltersUI();
         renderNewsSites();

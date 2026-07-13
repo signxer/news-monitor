@@ -66,6 +66,20 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3 mb-3" id="pending-card" style="display: none;">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.5s">
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <i class="bi bi-hourglass-split text-danger" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-danger mb-2">待推送</h5>
+                <h2 id="pending-count" class="card-text fw-bold">0</h2>
+                <button class="btn btn-sm btn-outline-danger mt-2" onclick="pushPending()">
+                    <i class="bi bi-send"></i> 立即推送
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 下一次采集倒计时 -->
@@ -84,6 +98,42 @@
     </div>
 </div>
 
+<!-- 筛选栏 -->
+<div class="card mb-3 fade-in" style="animation-delay: 0.55s">
+    <div class="card-body py-2">
+        <div class="row align-items-center g-2">
+            <div class="col-auto">
+                <i class="bi bi-funnel text-muted"></i>
+                <span class="text-muted small">筛选：</span>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="filter-site" style="min-width: 180px;" onchange="applyFilter()">
+                    <option value="">全部来源</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="filter-pushed" style="min-width: 150px;" onchange="applyFilter()">
+                    <option value="">全部状态</option>
+                    <option value="1">✅ 已推送</option>
+                    <option value="0">⏳ 未推送</option>
+                    <option value="filtered">🚫 主题无关</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-sm btn-outline-secondary" onclick="resetFilter()">
+                    <i class="bi bi-x-circle"></i> 重置
+                </button>
+            </div>
+            <div class="col text-end">
+                <small class="text-muted me-2">自动刷新</small>
+                <div class="spinner-border spinner-border-sm text-primary" role="status" id="refresh-spinner" style="display: none;">
+                    <span class="visually-hidden">刷新中...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 新闻列表 -->
 <div class="card fade-in" style="animation-delay: 0.6s">
     <div class="card-header">
@@ -91,12 +141,7 @@
             <h5 class="mb-0">
                 <i class="bi bi-list-ul text-primary"></i> 最新新闻
             </h5>
-            <div class="d-flex align-items-center">
-                <small class="text-muted me-2">自动刷新</small>
-                <div class="spinner-border spinner-border-sm text-primary" role="status" id="refresh-spinner" style="display: none;">
-                    <span class="visually-hidden">刷新中...</span>
-                </div>
-            </div>
+            <span id="filter-summary" class="text-muted small"></span>
         </div>
     </div>
     <div class="card-body">
@@ -122,6 +167,9 @@
     let nextCheckTime = null;
     let currentPage = 1;
     let currentPerPage = 20;
+    let filterSite = '';
+    let filterPushed = '';
+    let siteNamesLoaded = false;
 
     // 显示提示信息
     function showAlert(message, type = 'info') {
@@ -185,7 +233,11 @@
             </div>
         `;
 
-        fetch(`/api/news?page=${currentPage}&per_page=${currentPerPage}`)
+        let url = `/api/news?page=${currentPage}&per_page=${currentPerPage}`;
+        if (filterSite) url += `&site=${encodeURIComponent(filterSite)}`;
+        if (filterPushed !== '') url += `&pushed=${filterPushed}`;
+
+        fetch(url)
             .then(response => response.json())
             .then(data => {
                 if (data.error) {
@@ -194,6 +246,11 @@
                 newsData = data.items || [];
                 displayNews(data);
                 updateStatistics(data);
+                // 填充来源下拉
+                if (data.site_names && !siteNamesLoaded) {
+                    populateSiteFilter(data.site_names);
+                    siteNamesLoaded = true;
+                }
             })
             .catch(error => {
                 container.innerHTML = `
@@ -208,6 +265,38 @@
                     refreshSpinner.style.display = 'none';
                 }
             });
+    }
+
+    // 填充来源筛选下拉
+    function populateSiteFilter(names) {
+        const select = document.getElementById('filter-site');
+        const current = select.value;
+        select.innerHTML = '<option value="">全部来源</option>';
+        names.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            if (name === current) opt.selected = true;
+            select.appendChild(opt);
+        });
+    }
+
+    // 应用筛选
+    function applyFilter() {
+        filterSite = document.getElementById('filter-site').value;
+        filterPushed = document.getElementById('filter-pushed').value;
+        currentPage = 1;
+        loadPage(1);
+    }
+
+    // 重置筛选
+    function resetFilter() {
+        document.getElementById('filter-site').value = '';
+        document.getElementById('filter-pushed').value = '';
+        filterSite = '';
+        filterPushed = '';
+        currentPage = 1;
+        loadPage(1);
     }
 
     // 刷新当前页
@@ -238,13 +327,40 @@
 
         let html = '';
 
+        // 筛选摘要
+        const summaryEl = document.getElementById('filter-summary');
+        const parts = [];
+        if (filterSite) parts.push(`来源: ${filterSite}`);
+        if (filterPushed === '1') parts.push('已推送');
+        if (filterPushed === '0') parts.push('未推送');
+        if (filterPushed === 'filtered') parts.push('主题无关');
+        summaryEl.textContent = parts.length ? `筛选: ${parts.join(' · ')}` : '';
+
         // 新闻列表
         news.forEach((item, index) => {
             const dbDate = new Date(item.created_at);
             dbDate.setHours(dbDate.getHours() + 8);
             const date = dbDate.toLocaleString('zh-CN');
             const hasUrl = item.url && item.url.trim() !== '';
+            const hasTranslation = item.translated_title && item.translated_title !== item.title;
             const animationDelay = (index * 0.05).toFixed(2);
+
+            // 推送状态 badge
+            let statusBadge = '';
+            if (item.push_status === 'pushed') {
+                statusBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25"><i class="bi bi-check-circle"></i> 已推送</span>';
+            } else if (item.push_status === 'filtered') {
+                statusBadge = '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25"><i class="bi bi-x-circle"></i> 主题无关</span>';
+            } else {
+                statusBadge = '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25"><i class="bi bi-hourglass"></i> 未推送</span>';
+            }
+
+            // LLM 分数 badge
+            let scoreBadge = '';
+            if (item.llm_relevance >= 0) {
+                const scoreColor = item.llm_relevance >= 80 ? 'success' : item.llm_relevance >= 60 ? 'primary' : item.llm_relevance >= 40 ? 'warning' : 'danger';
+                scoreBadge = `<span class="badge bg-${scoreColor} bg-opacity-10 text-${scoreColor} border border-${scoreColor} border-opacity-25" title="${escapeHtml(item.llm_reason)}"><i class="bi bi-stars"></i> ${item.llm_relevance}分</span>`;
+            }
 
             html += `
                 <div class="news-item fade-in" style="animation-delay: ${animationDelay}s">
@@ -255,21 +371,35 @@
                             </div>
                         </div>
                         <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
-                                    <i class="bi bi-globe2"></i> ${escapeHtml(item.site_name)}
-                                </span>
-                                <small class="text-muted">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">
+                                        <i class="bi bi-globe2"></i> ${escapeHtml(item.site_name)}
+                                    </span>
+                                    ${statusBadge}
+                                    ${scoreBadge}
+                                </div>
+                                <small class="text-muted text-nowrap ms-2">
                                     <i class="bi bi-clock"></i> ${date}
                                 </small>
                             </div>
-                            <h6 class="news-title mb-2">
-                                ${hasUrl ? `<a href="${item.url}" target="_blank" class="text-decoration-none text-dark">` : ''}
-                                ${escapeHtml(item.title)}
-                                ${hasUrl ? `<i class="bi bi-box-arrow-up-right ms-1 text-primary"></i></a>` : ''}
-                            </h6>
-                            ${item.translated_title && item.translated_title !== item.title ?
-                                `<p class="news-translated mb-2"><i class="bi bi-translate text-info"></i> ${escapeHtml(item.translated_title)}</p>` : ''}
+                            ${hasTranslation ? `
+                                <h6 class="news-title mb-1">
+                                    ${hasUrl ? `<a href="${item.url}" target="_blank" class="text-decoration-none text-dark">` : ''}
+                                    ${escapeHtml(item.translated_title)}
+                                    ${hasUrl ? `<i class="bi bi-box-arrow-up-right ms-1 text-primary"></i></a>` : ''}
+                                </h6>
+                                <div class="text-muted small mb-1">
+                                    <i class="bi bi-translate"></i> ${escapeHtml(item.title)}
+                                </div>
+                            ` : `
+                                <h6 class="news-title mb-1">
+                                    ${hasUrl ? `<a href="${item.url}" target="_blank" class="text-decoration-none text-dark">` : ''}
+                                    ${escapeHtml(item.title)}
+                                    ${hasUrl ? `<i class="bi bi-box-arrow-up-right ms-1 text-primary"></i></a>` : ''}
+                                </h6>
+                            `}
+                            ${item.llm_reason ? `<div class="text-muted small mb-1"><i class="bi bi-robot"></i> ${escapeHtml(item.llm_reason)}</div>` : ''}
                             <div class="news-meta">
                                 <small class="text-muted">
                                     <i class="bi bi-calendar3"></i> 发布时间: ${item.date}
@@ -421,14 +551,42 @@
                 if (data.check_interval) {
                     document.getElementById('check-interval-display').textContent = data.check_interval;
                 }
-                
+
                 if (data.next_check_time) {
                     nextCheckTime = new Date(data.next_check_time);
                     startCountdown();
                 }
+
+                // 定时模式下显示待推送卡片
+                const pendingCard = document.getElementById('pending-card');
+                if (data.push_mode === 'scheduled') {
+                    pendingCard.style.display = 'block';
+                    document.getElementById('pending-count').textContent = data.pending_count || 0;
+                } else {
+                    pendingCard.style.display = 'none';
+                }
             })
             .catch(error => {
                 console.error('获取系统状态失败:', error);
+            });
+    }
+
+    // 手动推送待发新闻
+    function pushPending() {
+        if (!confirm('确定要立即推送所有待发新闻吗？')) return;
+
+        fetch('/api/push_pending', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    setTimeout(updateSystemStatus, 1000);
+                } else {
+                    showAlert(data.message, 'warning');
+                }
+            })
+            .catch(error => {
+                showAlert('推送失败: ' + error.message, 'danger');
             });
     }
     

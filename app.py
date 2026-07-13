@@ -81,6 +81,10 @@ class NewsMonitor:
                 'enabled': False,
                 'rules': []
             },
+            'push': {
+                'mode': 'immediate',  # 'immediate' 立即推送 | 'scheduled' 定时推送
+                'scheduled_times': ['09:00', '18:00'],  # 定时模式下的推送时间点 HH:MM
+            },
             'llm_filter': {
                 'enabled': False,
                 'api_url': 'https://api.deepseek.com/v1/chat/completions',
@@ -405,6 +409,14 @@ class NewsMonitor:
                         if k not in config['llm_filter']:
                             config['llm_filter'][k] = v
 
+                # 向后兼容：补全 push 缺失字段
+                if 'push' not in config:
+                    config['push'] = default_config['push']
+                else:
+                    for k, v in default_config['push'].items():
+                        if k not in config['push']:
+                            config['push'][k] = v
+
                 return config
         except FileNotFoundError:
             self.save_config(default_config)
@@ -430,10 +442,23 @@ class NewsMonitor:
                 translated_title TEXT,
                 url TEXT,
                 date TEXT,
+                pushed INTEGER DEFAULT 0,
+                llm_relevance INTEGER DEFAULT -1,
+                llm_reason TEXT DEFAULT '',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(site_name, title, url)
             )
         ''')
+        # 向后兼容：为已有数据库添加新列
+        for col, ddl in [
+            ('pushed', 'ALTER TABLE news ADD COLUMN pushed INTEGER DEFAULT 0'),
+            ('llm_relevance', 'ALTER TABLE news ADD COLUMN llm_relevance INTEGER DEFAULT -1'),
+            ('llm_reason', "ALTER TABLE news ADD COLUMN llm_reason TEXT DEFAULT ''"),
+        ]:
+            try:
+                cursor.execute(ddl)
+            except sqlite3.OperationalError:
+                pass  # 列已存在
         conn.commit()
         conn.close()
     
@@ -539,12 +564,12 @@ class NewsMonitor:
 
         return False
 
-    def llm_filter_news(self, news_items):
-        """使用大模型筛选新闻并翻译
+    def llm_score_news(self, news_items):
+        """使用大模型对新闻打分并翻译（前置打分，不过滤）
 
         调用 LLM API（OpenAI 兼容格式）判断每条新闻与用户主题的相关性，
-        并同时获取中文翻译。只有相关性分数 >= 阈值的新闻才会通过筛选。
-        API 调用失败或返回格式异常时自动重试，所有重试均失败后保留该条新闻。
+        并同时获取中文翻译。为每条新闻写入 llm_relevance / llm_reason / translated_title。
+        API 调用失败时保留原分数（-1 表示未评分）。
         """
         llm_config = self.config.get('llm_filter', {})
         if not llm_config.get('enabled', False):
@@ -554,22 +579,21 @@ class NewsMonitor:
         api_key = llm_config.get('api_key', '')
         model = llm_config.get('model', 'deepseek-v4-flash')
         user_prompt = llm_config.get('user_prompt', '')
-        threshold = llm_config.get('relevance_threshold', 60)
         max_retries = llm_config.get('max_retries', 2)
 
         if not api_key:
-            logger.warning("LLM筛选已启用但未配置API密钥，跳过筛选")
+            logger.warning("LLM筛选已启用但未配置API密钥，跳过打分")
             return news_items
 
         system_prompt = (
-            '你是一个新闻筛选和翻译助手。请根据用户提供的筛选主题，判断新闻标题的相关性，并提供翻译。'
+            '你是一个新闻筛选和翻译助手。请根据用户提供的筛选主题，判断新闻标题的相关性，并将英文标题翻译为中文。'
+            'translation字段必须为非空的中文翻译，不得留空或返回原文。'
             '请严格以以下JSON格式返回，不要包含任何其他内容：'
             '{"relevance": <0-100的整数，表示与筛选主题的相关性>,'
             '"reason": "<简短的相关性判断理由，中文>",'
-            '"translation": "<标题的中文翻译>"}'
+            '"translation": "<标题的中文翻译，必须非空>"}'
         )
 
-        filtered = []
         for item in news_items:
             title = item.get('title', '')
             if not title:
@@ -603,14 +627,13 @@ class NewsMonitor:
                         if json_match:
                             llm_result = json.loads(json_match.group())
                             relevance = llm_result.get('relevance', 0)
-                            if relevance >= threshold:
-                                item['translated_title'] = llm_result.get('translation', item.get('translated_title', title))
-                                item['llm_relevance'] = relevance
-                                item['llm_reason'] = llm_result.get('reason', '')
-                                filtered.append(item)
-                                logger.info(f"LLM筛选通过: [{relevance}分] {title}")
-                            else:
-                                logger.info(f"LLM筛选过滤: [{relevance}分] {title}")
+                            translated = (llm_result.get('translation') or '').strip()
+                            if not translated or translated == title:
+                                translated = self.translate_text(title)
+                            item['translated_title'] = translated
+                            item['llm_relevance'] = relevance
+                            item['llm_reason'] = llm_result.get('reason', '')
+                            logger.info(f"LLM打分: [{relevance}分] {title}")
                             success = True
                             break
                         else:
@@ -618,17 +641,16 @@ class NewsMonitor:
                     else:
                         logger.error(f"LLM API请求失败(第{attempt}次): {response.status_code}")
                 except Exception as e:
-                    logger.error(f"LLM筛选异常(第{attempt}次): {str(e)}")
+                    logger.error(f"LLM打分异常(第{attempt}次): {str(e)}")
 
-                # 未成功且还有重试机会，短暂等待后重试
                 if attempt < max_retries:
                     time.sleep(1)
 
             if not success:
-                logger.warning(f"LLM筛选{max_retries}次重试均失败，保留新闻: {title}")
-                filtered.append(item)
+                logger.warning(f"LLM打分{max_retries}次重试均失败，保留原文: {title}")
+                # llm_relevance 保持 -1 表示未评分
 
-        return filtered
+        return news_items
 
     def scrape_rss_site(self, site_config):
         """抓取RSS新闻网站"""
@@ -861,23 +883,50 @@ class NewsMonitor:
                 
                 # 获取链接
                 url = site_config['url']
-                link_element = element.find('a') or element.find_parent('a')
-                if link_element and link_element.get('href'):
-                    url = urljoin(site_config['url'], link_element['href'])
-                    logger.debug(f"提取到链接: {url}")
+                # 优先：元素本身就是 <a> 标签
+                if element.name == 'a' and element.get('href'):
+                    url = urljoin(site_config['url'], element['href'])
+                    logger.debug(f"提取到链接（元素自身为a标签）: {url}")
                 else:
-                    logger.debug("未找到有效链接，使用站点主页")
-                
+                    # 其次：查找子元素中的 <a> 标签
+                    link_element = element.find('a')
+                    if link_element and link_element.get('href'):
+                        url = urljoin(site_config['url'], link_element['href'])
+                        logger.debug(f"提取到链接（子a标签）: {url}")
+                    else:
+                        # 最后：查找父级 <a> 标签
+                        link_element = element.find_parent('a')
+                        if link_element and link_element.get('href'):
+                            url = urljoin(site_config['url'], link_element['href'])
+                            logger.debug(f"提取到链接（父a标签）: {url}")
+                        else:
+                            logger.debug("未找到有效链接，使用站点主页")
+
                 # 获取日期（可选）
                 date_str = datetime.now().strftime('%Y-%m-%d')
                 try:
                     if site_config.get('date_selector'):
-                        date_element = element.find_next(site_config['date_selector'])
+                        # 向上逐层查找父容器，直到找到包含日期元素的公共祖先
+                        date_element = None
+                        parent = element
+                        for _ in range(6):
+                            parent = parent.find_parent()
+                            if not parent:
+                                break
+                            date_element = parent.select_one(site_config['date_selector'])
+                            if date_element:
+                                break
                         if date_element:
                             date_str = date_element.get_text().strip()
                             logger.debug(f"提取到日期: {date_str}")
                         else:
-                            logger.debug("未找到日期元素")
+                            # 回退：尝试 find_next（仅对简单标签名有效）
+                            date_element = element.find_next(site_config['date_selector'])
+                            if date_element:
+                                date_str = date_element.get_text().strip()
+                                logger.debug(f"提取到日期（find_next回退）: {date_str}")
+                            else:
+                                logger.debug("未找到日期元素")
                 except Exception as date_e:
                     logger.debug(f"日期提取失败: {str(date_e)}")
                 
@@ -934,35 +983,103 @@ class NewsMonitor:
         """保存新闻到数据库"""
         if not news_items:
             return 0, []
-        
+
         conn = sqlite3.connect(str(get_db_path()))
         cursor = conn.cursor()
         new_count = 0
         new_news_list = []
-        
+
         for item in news_items:
             try:
                 cursor.execute('''
-                    INSERT OR IGNORE INTO news 
-                    (site_name, title, translated_title, url, date)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT OR IGNORE INTO news
+                    (site_name, title, translated_title, url, date, llm_relevance, llm_reason)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     item['site_name'],
                     item['title'],
                     item['translated_title'],
                     item['url'],
-                    item['date']
+                    item['date'],
+                    item.get('llm_relevance', -1),
+                    item.get('llm_reason', '')
                 ))
                 if cursor.rowcount > 0:
                     new_count += 1
                     new_news_list.append(item)
             except Exception as e:
                 logger.error(f"保存新闻失败: {str(e)}")
-        
+
         conn.commit()
         conn.close()
         return new_count, new_news_list
-    
+
+    def mark_as_pushed(self, news_list):
+        """标记新闻为已推送"""
+        if not news_list:
+            return
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        for item in news_list:
+            try:
+                cursor.execute('''
+                    UPDATE news SET pushed = 1
+                    WHERE site_name = ? AND title = ? AND url = ?
+                ''', (item['site_name'], item['title'], item['url']))
+            except Exception as e:
+                logger.error(f"标记已推送失败: {str(e)}")
+        conn.commit()
+        conn.close()
+
+    def get_pending_count(self):
+        """获取待推送新闻数量"""
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM news WHERE pushed = 0')
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+
+    def push_pending_news(self):
+        """定时推送：获取所有未推送新闻，统一发送，标记已推送"""
+        logger.info("定时推送任务触发")
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT site_name, title, translated_title, url, date, llm_relevance
+            FROM news WHERE pushed = 0
+            ORDER BY created_at ASC
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            logger.info("定时推送：无待推送新闻，跳过")
+            return
+
+        news_list = [{'site_name': r[0], 'title': r[1], 'translated_title': r[2],
+                      'url': r[3], 'date': r[4], 'llm_relevance': r[5]} for r in rows]
+        logger.info(f"定时推送：共 {len(news_list)} 条待推送新闻")
+
+        # 关键词筛选
+        filtered = [n for n in news_list if self.match_keyword_rules(n)]
+
+        # LLM阈值筛选（使用已存储的分数）
+        threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
+        if self.config.get('llm_filter', {}).get('enabled', False):
+            before = len(filtered)
+            filtered = [n for n in filtered if n.get('llm_relevance', -1) < 0 or n.get('llm_relevance', 0) >= threshold]
+            logger.info(f"定时推送：LLM阈值筛选 {before} -> {len(filtered)} 条 (阈值: {threshold})")
+
+        if filtered:
+            logger.info(f"定时推送：{len(filtered)} 条新闻通过筛选，开始推送")
+            self.send_notification_with_details(filtered, title_prefix='定时新闻汇总')
+            self.mark_as_pushed(filtered)
+        else:
+            logger.info("定时推送：无通过筛选的新闻，跳过推送")
+            # 即使没有通过筛选，也标记为已推送，避免下次重复筛选
+            self.mark_as_pushed(news_list)
+
     def send_notification(self, message):
         """发送通知"""
         notification_config = self.config['notification']
@@ -1006,13 +1123,13 @@ class NewsMonitor:
                 except Exception as e:
                     logger.error(f"Server酱通知发送失败: {serverchan_key}, 错误: {str(e)}")
     
-    def send_notification_with_details(self, new_news_list):
+    def send_notification_with_details(self, new_news_list, title_prefix='新闻更新'):
         """发送包含新闻详情的通知"""
         if not new_news_list:
             return
-        
+
         # 构建详细的通知消息
-        message_lines = [f"📰 发现 {len(new_news_list)} 条新新闻：\n"]
+        message_lines = [f"📰 {title_prefix}：发现 {len(new_news_list)} 条新闻\n"]
         
         for i, news in enumerate(new_news_list[:5], 1):  # 最多显示5条新闻
             site_name = news.get('site_name', '未知来源')
@@ -1093,7 +1210,7 @@ class NewsMonitor:
                 try:
                     serverchan_url = f"https://sctapi.ftqq.com/{serverchan_key.strip()}.send"
                     response = requests.post(serverchan_url, {
-                        'title': f'📰 新闻更新通知 ({len(new_news_list)}条)',
+                        'title': f'📰 {title_prefix} ({len(new_news_list)}条)',
                         'desp': message
                     }, timeout=10)
                     if response.status_code == 200:
@@ -1121,7 +1238,7 @@ class NewsMonitor:
                     from email.mime.multipart import MIMEMultipart
 
                     msg = MIMEMultipart('alternative')
-                    msg['Subject'] = f'📰 新闻更新通知 ({len(new_news_list)}条)'
+                    msg['Subject'] = f'📰 {title_prefix} ({len(new_news_list)}条)'
                     msg['From'] = from_address
                     msg['To'] = ', '.join(to_addresses)
 
@@ -1130,7 +1247,7 @@ class NewsMonitor:
 
                     # HTML 内容
                     html_lines = ['<html><body style="font-family: sans-serif; padding: 20px;">']
-                    html_lines.append(f'<h2>📰 发现 {len(new_news_list)} 条新新闻</h2>')
+                    html_lines.append(f'<h2>📰 {title_prefix}：{len(new_news_list)} 条新闻</h2>')
                     for i, news in enumerate(new_news_list[:10], 1):
                         site_name = news.get('site_name', '未知来源')
                         title = news.get('title', '无标题')
@@ -1237,7 +1354,13 @@ class NewsMonitor:
                         logger.info(f"完成检查站点: {site.get('name', 'Unknown')}，获取 {len(news_items)} 条新闻")
                     except Exception as e:
                         logger.error(f"检查站点 {site.get('name', 'Unknown')} 失败: {str(e)}")
-            
+
+            # LLM前置打分（在保存之前，分数会写入 item 字典）
+            if all_news and self.config.get('llm_filter', {}).get('enabled', False):
+                logger.info(f"开始LLM前置打分，共 {len(all_news)} 条新闻")
+                all_news = self.llm_score_news(all_news)
+                logger.info(f"LLM打分完成")
+
             new_count, new_news_list = self.save_news(all_news)
 
             if new_count > 0:
@@ -1246,15 +1369,21 @@ class NewsMonitor:
                 # 关键词筛选
                 filtered_news = [n for n in new_news_list if self.match_keyword_rules(n)]
 
-                # LLM大模型筛选
-                if filtered_news and self.config.get('llm_filter', {}).get('enabled', False):
-                    logger.info(f"开始LLM大模型筛选，共 {len(filtered_news)} 条待筛选")
-                    filtered_news = self.llm_filter_news(filtered_news)
-                    logger.info(f"LLM筛选后剩余 {len(filtered_news)} 条新闻")
+                # LLM阈值筛选（分数已在前置打分时写入）
+                threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
+                if self.config.get('llm_filter', {}).get('enabled', False):
+                    before = len(filtered_news)
+                    filtered_news = [n for n in filtered_news if n.get('llm_relevance', -1) < 0 or n.get('llm_relevance', 0) >= threshold]
+                    logger.info(f"LLM阈值筛选: {before} -> {len(filtered_news)} 条 (阈值: {threshold})")
 
                 if filtered_news:
-                    logger.info(f"{len(filtered_news)} 条新闻通过筛选，开始推送")
-                    self.send_notification_with_details(filtered_news)
+                    push_mode = self.config.get('push', {}).get('mode', 'immediate')
+                    if push_mode == 'scheduled':
+                        logger.info(f"定时模式：{len(filtered_news)} 条新闻已存入待推送队列")
+                    else:
+                        logger.info(f"{len(filtered_news)} 条新闻通过筛选，开始推送")
+                        self.send_notification_with_details(filtered_news)
+                        self.mark_as_pushed(filtered_news)
                 else:
                     logger.info(f"共 {new_count} 条新新闻，但无通过筛选的新闻，跳过推送")
             else:
@@ -1269,14 +1398,22 @@ class NewsMonitor:
         """启动定时任务"""
         # 设置初始的last_check_time为当前时间，这样倒计时就会从完整的间隔开始
         self.last_check_time = datetime.now()
-        
+
         schedule.every(self.config['check_interval']).minutes.do(self.check_news_updates)
-        
+
+        # 定时推送任务
+        push_config = self.config.get('push', {})
+        if push_config.get('mode') == 'scheduled':
+            for time_str in push_config.get('scheduled_times', []):
+                if time_str.strip():
+                    schedule.every().day.at(time_str.strip()).do(self.push_pending_news)
+                    logger.info(f"定时推送任务已添加：{time_str.strip()}")
+
         def run_scheduler():
             while True:
                 schedule.run_pending()
                 time.sleep(1)
-        
+
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
         logger.info(f"定时任务已启动，检查间隔: {self.config['check_interval']} 分钟")
@@ -1316,35 +1453,76 @@ def api_news():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         per_page = min(per_page, 100)  # 上限100条
+        site_filter = request.args.get('site', '')
+        pushed_filter = request.args.get('pushed', '')  # '' | '0' | '1'
 
         offset = (page - 1) * per_page
 
         conn = sqlite3.connect(str(get_db_path()))
         cursor = conn.cursor()
 
+        # 构建 WHERE 条件
+        conditions = []
+        params = []
+        if site_filter:
+            conditions.append('site_name = ?')
+            params.append(site_filter)
+        if pushed_filter == '1':
+            conditions.append('pushed = 1')
+        elif pushed_filter == '0':
+            conditions.append('pushed = 0')
+        elif pushed_filter == 'filtered':
+            # 主题无关：未推送且LLM分数低于阈值
+            llm_threshold = monitor.config.get('llm_filter', {}).get('relevance_threshold', 60)
+            conditions.append('pushed = 0')
+            conditions.append('llm_relevance >= 0')
+            conditions.append(f'llm_relevance < {llm_threshold}')
+        where_clause = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
+
         # 总数
-        cursor.execute('SELECT COUNT(*) FROM news')
+        cursor.execute(f'SELECT COUNT(*) FROM news{where_clause}', params)
         total = cursor.fetchone()[0]
 
         # 分页数据
-        cursor.execute('''
-            SELECT site_name, title, translated_title, url, date, created_at
-            FROM news
+        cursor.execute(f'''
+            SELECT site_name, title, translated_title, url, date, created_at, pushed, llm_relevance, llm_reason
+            FROM news{where_clause}
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
-        ''', (per_page, offset))
+        ''', params + [per_page, offset])
         news = cursor.fetchall()
+
+        # 获取所有来源列表（用于筛选下拉）
+        cursor.execute('SELECT DISTINCT site_name FROM news ORDER BY site_name')
+        site_names = [row[0] for row in cursor.fetchall()]
+
+        # LLM阈值（用于前端判断"主题无关"）
+        llm_threshold = monitor.config.get('llm_filter', {}).get('relevance_threshold', 60)
+
         conn.close()
 
         news_list = []
         for item in news:
+            relevance = item[7]
+            pushed = bool(item[6])
+            # 推送状态：已推送 / 主题无关不推送 / 未推送
+            if pushed:
+                push_status = 'pushed'
+            elif relevance >= 0 and relevance < llm_threshold:
+                push_status = 'filtered'
+            else:
+                push_status = 'pending'
             news_list.append({
                 'site_name': item[0],
                 'title': item[1],
                 'translated_title': item[2],
                 'url': item[3],
                 'date': item[4],
-                'created_at': item[5]
+                'created_at': item[5],
+                'pushed': pushed,
+                'push_status': push_status,
+                'llm_relevance': relevance,
+                'llm_reason': item[8] or ''
             })
 
         return jsonify({
@@ -1352,7 +1530,9 @@ def api_news():
             'total': total,
             'page': page,
             'per_page': per_page,
-            'pages': (total + per_page - 1) // per_page
+            'pages': (total + per_page - 1) // per_page,
+            'site_names': site_names,
+            'llm_threshold': llm_threshold
         })
     except Exception as e:
         return jsonify({'error': str(e)})
@@ -1362,6 +1542,18 @@ def api_check_now():
     try:
         threading.Thread(target=monitor.check_news_updates, daemon=True).start()
         return jsonify({'success': True, 'message': '开始检查新闻更新'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/push_pending', methods=['POST'])
+def api_push_pending():
+    """手动触发定时推送"""
+    try:
+        pending_count = monitor.get_pending_count()
+        if pending_count == 0:
+            return jsonify({'success': False, 'message': '没有待推送的新闻'})
+        threading.Thread(target=monitor.push_pending_news, daemon=True).start()
+        return jsonify({'success': True, 'message': f'开始推送 {pending_count} 条待发新闻'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -1402,14 +1594,17 @@ def api_status():
     else:
         # 如果没有上次检查时间，使用当前时间加上检查间隔
         next_check_time = datetime.now() + timedelta(minutes=monitor.config['check_interval'])
-    
+
+    push_config = monitor.config.get('push', {})
     return jsonify({
         'is_running': monitor.is_running,
         'driver_available': True,
         'config_loaded': monitor.config is not None,
         'check_interval': monitor.config['check_interval'],
         'next_check_time': next_check_time.isoformat() if next_check_time else None,
-        'last_check_time': monitor.last_check_time.isoformat() if hasattr(monitor, 'last_check_time') and monitor.last_check_time else None
+        'last_check_time': monitor.last_check_time.isoformat() if hasattr(monitor, 'last_check_time') and monitor.last_check_time else None,
+        'push_mode': push_config.get('mode', 'immediate'),
+        'pending_count': monitor.get_pending_count() if push_config.get('mode') == 'scheduled' else 0
     })
 
 @app.route('/api/test_notification', methods=['POST'])
