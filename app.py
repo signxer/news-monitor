@@ -682,7 +682,112 @@ class NewsMonitor:
                 pass  # 列已存在
         conn.commit()
         conn.close()
-    
+
+        # 站点统计表
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS site_stats (
+                site_name TEXT PRIMARY KEY,
+                last_check TIMESTAMP,
+                last_success TIMESTAMP,
+                last_error TEXT DEFAULT '',
+                consecutive_errors INTEGER DEFAULT 0,
+                total_checks INTEGER DEFAULT 0,
+                total_success INTEGER DEFAULT 0,
+                total_errors INTEGER DEFAULT 0,
+                total_news INTEGER DEFAULT 0,
+                last_news_count INTEGER DEFAULT 0,
+                avg_response_time REAL DEFAULT 0
+            )
+        ''')
+        conn.commit()
+        conn.close()
+
+    def update_site_stats(self, site_name, success, news_count=0, error_msg='', response_time=0):
+        """更新站点统计"""
+        try:
+            conn = sqlite3.connect(str(get_db_path()))
+            cursor = conn.cursor()
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            # 尝试更新已有记录
+            cursor.execute('SELECT total_checks, total_success, total_errors, total_news, avg_response_time, consecutive_errors FROM site_stats WHERE site_name = ?', (site_name,))
+            row = cursor.fetchone()
+
+            if row:
+                total_checks = row[0] + 1
+                total_success = row[1] + (1 if success else 0)
+                total_errors = row[2] + (0 if success else 1)
+                total_news = row[3] + news_count
+                # 指数移动平均响应时间
+                old_avg = row[4]
+                avg_time = old_avg * 0.8 + response_time * 0.2 if old_avg > 0 else response_time
+                consecutive = 0 if success else (row[5] + 1)
+
+                cursor.execute('''
+                    UPDATE site_stats SET
+                        last_check = ?,
+                        last_success = CASE WHEN ? THEN ? ELSE last_success END,
+                        last_error = CASE WHEN ? THEN '' ELSE ? END,
+                        consecutive_errors = ?,
+                        total_checks = ?,
+                        total_success = ?,
+                        total_errors = ?,
+                        total_news = ?,
+                        last_news_count = ?,
+                        avg_response_time = ?
+                    WHERE site_name = ?
+                ''', (now, success, now, success, error_msg, consecutive,
+                      total_checks, total_success, total_errors, total_news,
+                      news_count, round(avg_time, 2), site_name))
+            else:
+                cursor.execute('''
+                    INSERT INTO site_stats
+                    (site_name, last_check, last_success, last_error, consecutive_errors,
+                     total_checks, total_success, total_errors, total_news, last_news_count, avg_response_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (site_name, now,
+                      now if success else None,
+                      '' if success else error_msg,
+                      0 if success else 1,
+                      1, 1 if success else 0, 0 if success else 1,
+                      news_count, news_count, round(response_time, 2)))
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error(f"更新站点统计失败: {site_name}, {str(e)}")
+
+    def get_site_stats(self):
+        """获取所有站点统计"""
+        try:
+            conn = sqlite3.connect(str(get_db_path()))
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM site_stats ORDER BY site_name')
+            rows = cursor.fetchall()
+            conn.close()
+
+            stats = []
+            for r in rows:
+                stats.append({
+                    'site_name': r[0],
+                    'last_check': r[1],
+                    'last_success': r[2],
+                    'last_error': r[3] or '',
+                    'consecutive_errors': r[4],
+                    'total_checks': r[5],
+                    'total_success': r[6],
+                    'total_errors': r[7],
+                    'total_news': r[8],
+                    'last_news_count': r[9],
+                    'avg_response_time': r[10]
+                })
+            return stats
+        except Exception as e:
+            logger.error(f"获取站点统计失败: {str(e)}")
+            return []
+
     def create_webdriver(self):
         """创建Chrome WebDriver（使用 webdriver-manager 自动管理驱动）"""
         chrome_options = Options()
@@ -1563,18 +1668,27 @@ class NewsMonitor:
             
             # 使用线程池并发处理
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # 提交所有任务
-                future_to_site = {executor.submit(self.scrape_news_site, site): site for site in enabled_sites}
-                
+                # 提交所有任务（记录提交时间）
+                future_to_site = {}
+                future_to_start = {}
+                for site in enabled_sites:
+                    future = executor.submit(self.scrape_news_site, site)
+                    future_to_site[future] = site
+                    future_to_start[future] = time.time()
+
                 # 收集结果
                 for future in as_completed(future_to_site):
                     site = future_to_site[future]
+                    site_name = site.get('name', 'Unknown')
+                    response_time = time.time() - future_to_start[future]
                     try:
                         news_items = future.result()
                         all_news.extend(news_items)
-                        logger.info(f"完成检查站点: {site.get('name', 'Unknown')}，获取 {len(news_items)} 条新闻")
+                        self.update_site_stats(site_name, True, len(news_items), '', response_time)
+                        logger.info(f"完成检查站点: {site_name}，获取 {len(news_items)} 条新闻")
                     except Exception as e:
-                        logger.error(f"检查站点 {site.get('name', 'Unknown')} 失败: {str(e)}")
+                        self.update_site_stats(site_name, False, 0, str(e), response_time)
+                        logger.error(f"检查站点 {site_name} 失败: {str(e)}")
 
             # LLM前置打分（在保存之前，分数会写入 item 字典）
             if all_news and self.config.get('llm_filter', {}).get('enabled', False):
@@ -1653,6 +1767,10 @@ def config_page():
 @app.route('/logs')
 def logs_page():
     return render_template('logs.html')
+
+@app.route('/sites')
+def sites_page():
+    return render_template('sites.html')
 
 @app.route('/api/config', methods=['GET', 'POST'])
 def api_config():
@@ -1777,6 +1895,15 @@ def api_push_pending():
         return jsonify({'success': True, 'message': f'开始推送 {pending_count} 条待发新闻'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/site_stats')
+def api_site_stats():
+    """获取站点统计"""
+    try:
+        stats = monitor.get_site_stats()
+        return jsonify({'stats': stats})
+    except Exception as e:
+        return jsonify({'error': str(e)})
 
 @app.route('/api/restart', methods=['POST'])
 def api_restart():

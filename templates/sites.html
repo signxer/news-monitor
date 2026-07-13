@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}站点健康 - 新闻监控系统{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-4 mb-4">
+    <div class="fade-in">
+        <h1 class="h2 mb-1"><i class="bi bi-activity text-primary"></i> 站点健康监控</h1>
+        <p class="text-muted mb-0">查看各新闻源的抓取状态和统计数据</p>
+    </div>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-outline-secondary" onclick="loadStats()">
+            <i class="bi bi-arrow-repeat"></i> 刷新
+        </button>
+    </div>
+</div>
+
+<!-- 汇总卡片 -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.1s">
+            <div class="card-body">
+                <div class="mb-2"><i class="bi bi-globe text-primary" style="font-size: 2rem;"></i></div>
+                <h6 class="card-title text-muted">站点总数</h6>
+                <h3 id="stat-total" class="fw-bold">-</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.2s">
+            <div class="card-body">
+                <div class="mb-2"><i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i></div>
+                <h6 class="card-title text-muted">健康站点</h6>
+                <h3 id="stat-healthy" class="fw-bold text-success">-</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.3s">
+            <div class="card-body">
+                <div class="mb-2"><i class="bi bi-exclamation-triangle text-warning" style="font-size: 2rem;"></i></div>
+                <h6 class="card-title text-muted">警告站点</h6>
+                <h3 id="stat-warning" class="fw-bold text-warning">-</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.4s">
+            <div class="card-body">
+                <div class="mb-2"><i class="bi bi-x-circle text-danger" style="font-size: 2rem;"></i></div>
+                <h6 class="card-title text-muted">异常站点</h6>
+                <h3 id="stat-error" class="fw-bold text-danger">-</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 筛选 -->
+<div class="card mb-3 fade-in" style="animation-delay: 0.45s">
+    <div class="card-body py-2">
+        <div class="row align-items-center g-2">
+            <div class="col-auto">
+                <i class="bi bi-funnel text-muted"></i>
+                <span class="text-muted small">筛选：</span>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm" id="filter-status" onchange="renderTable()">
+                    <option value="">全部状态</option>
+                    <option value="healthy">✅ 健康</option>
+                    <option value="warning">⚠️ 警告</option>
+                    <option value="error">❌ 异常</option>
+                    <option value="unknown">❓ 未检测</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 站点表格 -->
+<div class="card fade-in" style="animation-delay: 0.5s">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>站点名称</th>
+                        <th class="text-center">状态</th>
+                        <th class="text-center">本次条数</th>
+                        <th class="text-center">累计条数</th>
+                        <th class="text-center">成功率</th>
+                        <th class="text-center">平均耗时</th>
+                        <th>上次检查</th>
+                        <th>上次成功</th>
+                        <th>最近错误</th>
+                    </tr>
+                </thead>
+                <tbody id="stats-table-body">
+                    <tr>
+                        <td colspan="9" class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm me-2"></div>加载中...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="alert-container"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allStats = [];
+    let configSites = [];
+
+    function showAlert(message, type = 'info') {
+        const c = document.getElementById('alert-container');
+        const id = 'a-' + Date.now();
+        c.insertAdjacentHTML('beforeend', `<div id="${id}" class="alert alert-${type} alert-dismissible fade show mt-3">${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`);
+        setTimeout(() => { const el = document.getElementById(id); if (el) el.remove(); }, 3000);
+    }
+
+    function loadStats() {
+        Promise.all([
+            fetch('/api/site_stats').then(r => r.json()),
+            fetch('/api/config').then(r => r.json())
+        ]).then(([statsData, configData]) => {
+            allStats = statsData.stats || [];
+            configSites = configData.news_sites || [];
+            renderSummary();
+            renderTable();
+        }).catch(err => {
+            showAlert('加载失败: ' + err.message, 'danger');
+        });
+    }
+
+    function getStatus(stat) {
+        if (!stat || !stat.last_check) return 'unknown';
+        if (stat.consecutive_errors >= 3) return 'error';
+        if (stat.consecutive_errors >= 1) return 'warning';
+        return 'healthy';
+    }
+
+    function getStatusBadge(status) {
+        switch (status) {
+            case 'healthy': return '<span class="badge bg-success"><i class="bi bi-check-circle"></i> 健康</span>';
+            case 'warning': return '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> 警告</span>';
+            case 'error':   return '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> 异常</span>';
+            default:        return '<span class="badge bg-secondary"><i class="bi bi-question-circle"></i> 未检测</span>';
+        }
+    }
+
+    function formatTime(ts) {
+        if (!ts) return '-';
+        return ts.replace('T', ' ').substring(0, 19);
+    }
+
+    function renderSummary() {
+        let healthy = 0, warning = 0, error = 0;
+        // 只统计已配置的站点
+        const configuredNames = configSites.map(s => s.name);
+        const statsMap = {};
+        allStats.forEach(s => statsMap[s.site_name] = s);
+
+        configuredNames.forEach(name => {
+            const s = statsMap[name];
+            const st = getStatus(s);
+            if (st === 'healthy') healthy++;
+            else if (st === 'warning') warning++;
+            else if (st === 'error') error++;
+        });
+
+        document.getElementById('stat-total').textContent = configuredNames.length;
+        document.getElementById('stat-healthy').textContent = healthy;
+        document.getElementById('stat-warning').textContent = warning;
+        document.getElementById('stat-error').textContent = error;
+    }
+
+    function renderTable() {
+        const filter = document.getElementById('filter-status').value;
+        const statsMap = {};
+        allStats.forEach(s => statsMap[s.site_name] = s);
+
+        // 以配置列表为主，补充未检测的站点
+        const rows = configSites.map(site => {
+            const s = statsMap[site.name] || { site_name: site.name };
+            return { ...s, enabled: site.enabled, url: site.url, site_type: site.site_type };
+        });
+
+        // 也加入有统计但不在配置中的站点（可能被删除）
+        const configNames = new Set(configSites.map(s => s.name));
+        allStats.forEach(s => {
+            if (!configNames.has(s.site_name)) {
+                rows.push({ ...s, enabled: false, url: '', site_type: '' });
+            }
+        });
+
+        const filtered = filter ? rows.filter(r => getStatus(r) === filter) : rows;
+
+        if (filtered.length === 0) {
+            document.getElementById('stats-table-body').innerHTML = '<tr><td colspan="9" class="text-center py-4 text-muted">无匹配站点</td></tr>';
+            return;
+        }
+
+        // 排序：异常 > 警告 > 未检测 > 健康
+        const order = { error: 0, warning: 1, unknown: 2, healthy: 3 };
+        filtered.sort((a, b) => (order[getStatus(a)] || 2) - (order[getStatus(b)] || 2));
+
+        let html = '';
+        filtered.forEach(r => {
+            const status = getStatus(r);
+            const successRate = r.total_checks > 0 ? Math.round(r.total_success / r.total_checks * 100) : null;
+            const avgTime = r.avg_response_time > 0 ? r.avg_response_time.toFixed(1) + 's' : '-';
+            const disabledBadge = r.enabled === false ? ' <span class="badge bg-secondary">禁用</span>' : '';
+
+            let rateClass = '';
+            if (successRate !== null) {
+                rateClass = successRate >= 90 ? 'text-success' : successRate >= 70 ? 'text-warning' : 'text-danger';
+            }
+
+            html += `<tr>
+                <td>
+                    <strong>${escapeHtml(r.site_name)}</strong>${disabledBadge}
+                    <div class="text-muted small text-truncate" style="max-width:300px;">${escapeHtml(r.url || '')}</div>
+                </td>
+                <td class="text-center">${getStatusBadge(status)}</td>
+                <td class="text-center fw-bold">${r.last_news_count != null ? r.last_news_count : '-'}</td>
+                <td class="text-center">${r.total_news != null ? r.total_news : '-'}</td>
+                <td class="text-center fw-bold ${rateClass}">${successRate !== null ? successRate + '%' : '-'}</td>
+                <td class="text-center">${avgTime}</td>
+                <td><small>${formatTime(r.last_check)}</small></td>
+                <td><small>${formatTime(r.last_success)}</small></td>
+                <td>${r.last_error ? '<span class="text-danger small" title="' + escapeHtml(r.last_error) + '">' + escapeHtml(r.last_error.substring(0, 50)) + '</span>' : '<span class="text-muted">-</span>'}</td>
+            </tr>`;
+        });
+
+        document.getElementById('stats-table-body').innerHTML = html;
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    document.addEventListener('DOMContentLoaded', loadStats);
+    setInterval(loadStats, 30000);
+</script>
+{% endblock %}
