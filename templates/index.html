@@ -98,6 +98,25 @@
     </div>
 </div>
 
+<!-- 定时推送提示 -->
+<div class="alert alert-info fade-in mb-3" id="scheduled-push-banner" style="display: none; animation-delay: 0.52s;">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <i class="bi bi-clock-history me-1"></i>
+            <strong>定时推送模式</strong>
+            <span class="ms-2">📰 <strong id="banner-pending">0</strong> 条新闻待推送</span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span>
+                <i class="bi bi-alarm me-1"></i>下次推送：<strong id="banner-next-push">--:--</strong>
+            </span>
+            <button class="btn btn-sm btn-primary" onclick="pushPending()">
+                <i class="bi bi-send"></i> 立即推送
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- 筛选栏 -->
 <div class="card mb-3 fade-in" style="animation-delay: 0.55s">
     <div class="card-body py-2">
@@ -557,13 +576,23 @@
                     startCountdown();
                 }
 
-                // 定时模式下显示待推送卡片
+                // 定时模式下显示待推送卡片和提示栏
                 const pendingCard = document.getElementById('pending-card');
+                const banner = document.getElementById('scheduled-push-banner');
                 if (data.push_mode === 'scheduled') {
                     pendingCard.style.display = 'block';
                     document.getElementById('pending-count').textContent = data.pending_count || 0;
+                    banner.style.display = 'block';
+                    document.getElementById('banner-pending').textContent = data.pending_count || 0;
+                    if (data.next_push_time) {
+                        const t = new Date(data.next_push_time);
+                        document.getElementById('banner-next-push').textContent = t.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+                    } else {
+                        document.getElementById('banner-next-push').textContent = '未设置';
+                    }
                 } else {
                     pendingCard.style.display = 'none';
+                    banner.style.display = 'none';
                 }
             })
             .catch(error => {

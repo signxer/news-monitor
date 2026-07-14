@@ -2065,6 +2065,41 @@ def api_status():
         next_check_time = datetime.now() + timedelta(minutes=monitor.config['check_interval'])
 
     push_config = monitor.config.get('push', {})
+    push_mode = push_config.get('mode', 'immediate')
+
+    # 计算下次推送时间（定时模式）
+    next_push_time = None
+    if push_mode == 'scheduled':
+        scheduled_times = push_config.get('scheduled_times', [])
+        if scheduled_times:
+            now = datetime.now()
+            today = now.strftime('%Y-%m-%d')
+            candidates = []
+            for t in scheduled_times:
+                t = t.strip()
+                if not t:
+                    continue
+                try:
+                    dt = datetime.strptime(f"{today} {t}", '%Y-%m-%d %H:%M')
+                    if dt > now:
+                        candidates.append(dt)
+                except ValueError:
+                    pass
+            # 如果今天没有剩余时间点，取明天第一个
+            if not candidates:
+                for t in sorted(scheduled_times):
+                    t = t.strip()
+                    if not t:
+                        continue
+                    try:
+                        dt = datetime.strptime(f"{today} {t}", '%Y-%m-%d %H:%M') + timedelta(days=1)
+                        candidates.append(dt)
+                        break
+                    except ValueError:
+                        pass
+            if candidates:
+                next_push_time = min(candidates)
+
     return jsonify({
         'is_running': monitor.is_running,
         'driver_available': True,
@@ -2072,8 +2107,9 @@ def api_status():
         'check_interval': monitor.config['check_interval'],
         'next_check_time': next_check_time.isoformat() if next_check_time else None,
         'last_check_time': monitor.last_check_time.isoformat() if hasattr(monitor, 'last_check_time') and monitor.last_check_time else None,
-        'push_mode': push_config.get('mode', 'immediate'),
-        'pending_count': monitor.get_pending_count() if push_config.get('mode') == 'scheduled' else 0
+        'push_mode': push_mode,
+        'pending_count': monitor.get_pending_count() if push_mode == 'scheduled' else 0,
+        'next_push_time': next_push_time.isoformat() if next_push_time else None
     })
 
 @app.route('/api/test_notification', methods=['POST'])
