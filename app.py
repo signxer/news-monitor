@@ -48,6 +48,12 @@ class NewsMonitor:
         self.config = self.load_config()
         self.is_running = False
         self.last_check_time = None
+        self.scrape_progress = {
+            'current_site': '',
+            'completed': 0,
+            'total': 0,
+            'status': 'idle'  # idle | running | scoring | done
+        }
         self.init_database()
         
     def load_config(self):
@@ -1775,18 +1781,26 @@ class NewsMonitor:
             self.clean_log_file()
             logger.info("开始检查新闻更新...")
             all_news = []
-            
+
             # 获取启用的新闻站点
             enabled_sites = [site for site in self.config['news_sites'] if site.get('enabled', True)]
-            
+
             if not enabled_sites:
                 logger.info("没有启用的新闻站点")
                 return
-            
+
+            # 初始化进度
+            self.scrape_progress = {
+                'current_site': '',
+                'completed': 0,
+                'total': len(enabled_sites),
+                'status': 'running'
+            }
+
             # 获取并发工作线程数量
             max_workers = self.config.get('concurrent_workers', 5)
             logger.info(f"使用 {max_workers} 个并发线程检查 {len(enabled_sites)} 个新闻站点")
-            
+
             # 使用线程池并发处理
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 # 提交所有任务（记录提交时间）
@@ -1802,6 +1816,9 @@ class NewsMonitor:
                     site = future_to_site[future]
                     site_name = site.get('name', 'Unknown')
                     response_time = time.time() - future_to_start[future]
+                    # 更新进度
+                    self.scrape_progress['current_site'] = site_name
+                    self.scrape_progress['completed'] += 1
                     try:
                         news_items = future.result()
                         all_news.extend(news_items)
@@ -1813,9 +1830,14 @@ class NewsMonitor:
 
             # LLM前置打分（在保存之前，分数会写入 item 字典）
             if all_news and self.config.get('llm_filter', {}).get('enabled', False):
+                self.scrape_progress['status'] = 'scoring'
+                self.scrape_progress['current_site'] = 'LLM大模型打分中...'
                 logger.info(f"开始LLM前置打分，共 {len(all_news)} 条新闻")
                 all_news = self.llm_score_news(all_news)
                 logger.info(f"LLM打分完成")
+
+            self.scrape_progress['status'] = 'done'
+            self.scrape_progress['current_site'] = ''
 
             new_count, new_news_list = self.save_news(all_news)
 
@@ -1849,6 +1871,12 @@ class NewsMonitor:
             logger.error(f"检查新闻更新失败: {str(e)}")
         finally:
             self.is_running = False
+            self.scrape_progress = {
+                'current_site': '',
+                'completed': 0,
+                'total': 0,
+                'status': 'idle'
+            }
     
     def start_scheduler(self):
         """启动定时任务"""
@@ -2109,7 +2137,8 @@ def api_status():
         'last_check_time': monitor.last_check_time.isoformat() if hasattr(monitor, 'last_check_time') and monitor.last_check_time else None,
         'push_mode': push_mode,
         'pending_count': monitor.get_pending_count() if push_mode == 'scheduled' else 0,
-        'next_push_time': next_push_time.isoformat() if next_push_time else None
+        'next_push_time': next_push_time.isoformat() if next_push_time else None,
+        'scrape_progress': monitor.scrape_progress
     })
 
 @app.route('/api/test_notification', methods=['POST'])
