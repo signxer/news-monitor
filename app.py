@@ -1585,45 +1585,66 @@ class NewsMonitor:
         if notification_config.get('bark_url') and notification_config['bark_url'] not in bark_urls:
             bark_urls.append(notification_config['bark_url'])
         
+        import urllib.parse
+
         for bark_url in bark_urls:
             if bark_url.strip():
-                # 为每条新闻发送单独的通知
-                for news in new_news_list:
+                if title_prefix == '定时新闻汇总':
+                    # 定时推送模式：发送一条汇总通知
                     try:
-                        site_name = news.get('site_name', '未知来源')
-                        title = news.get('title', '无标题')
-                        translated_title = news.get('translated_title', '')
-                        url = news.get('url', '')
-                        
-                        # 构建推送标题和内容
-                        push_title = f"📰 {site_name}"
-                        
-                        # 构建推送内容
-                        content_lines = [f"{title}"]
-                        if translated_title and translated_title != title:
-                            content_lines.append(f"{translated_title}")
-                        push_content = "\n".join(content_lines)
-                        
-                        # URL编码
-                        import urllib.parse
+                        push_title = f"📰 {title_prefix}"
+                        # 构建汇总内容
+                        summary_lines = []
+                        for i, news in enumerate(new_news_list[:10], 1):
+                            t = news.get('translated_title') or news.get('title', '')
+                            summary_lines.append(f"{i}. {t}")
+                        if len(new_news_list) > 10:
+                            summary_lines.append(f"... 还有 {len(new_news_list) - 10} 条")
+                        push_content = f"共 {len(new_news_list)} 条新闻\n" + "\n".join(summary_lines)
+
                         encoded_title = urllib.parse.quote(push_title)
                         encoded_content = urllib.parse.quote(push_content)
-                        
-                        # 构建完整的Bark URL
-                        if url:
-                            encoded_url = urllib.parse.quote(url)
-                            full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}?url={encoded_url}"
-                        else:
-                            full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
-                        
+                        full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
+
                         response = requests.get(full_url, timeout=10)
-                        
                         if response.status_code == 200:
-                            logger.info(f"Bark通知发送成功: {bark_url} - {title[:30]}...")
+                            logger.info(f"Bark定时汇总通知发送成功: {bark_url}")
                         else:
-                            logger.warning(f"Bark通知发送失败，状态码: {response.status_code}, URL: {bark_url}")
+                            logger.warning(f"Bark定时汇总通知发送失败，状态码: {response.status_code}")
                     except Exception as e:
-                        logger.error(f"Bark通知发送失败: {bark_url}, 新闻: {title[:30]}..., 错误: {str(e)}")
+                        logger.error(f"Bark定时汇总通知发送失败: {bark_url}, 错误: {str(e)}")
+                else:
+                    # 立即推送模式：每条新闻单独发送
+                    for news in new_news_list:
+                        try:
+                            site_name = news.get('site_name', '未知来源')
+                            title = news.get('title', '无标题')
+                            translated_title = news.get('translated_title', '')
+                            url = news.get('url', '')
+
+                            push_title = f"📰 {site_name}"
+                            content_lines = [f"{title}"]
+                            if translated_title and translated_title != title:
+                                content_lines.append(f"{translated_title}")
+                            push_content = "\n".join(content_lines)
+
+                            encoded_title = urllib.parse.quote(push_title)
+                            encoded_content = urllib.parse.quote(push_content)
+
+                            if url:
+                                encoded_url = urllib.parse.quote(url)
+                                full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}?url={encoded_url}"
+                            else:
+                                full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
+
+                            response = requests.get(full_url, timeout=10)
+
+                            if response.status_code == 200:
+                                logger.info(f"Bark通知发送成功: {bark_url} - {title[:30]}...")
+                            else:
+                                logger.warning(f"Bark通知发送失败，状态码: {response.status_code}, URL: {bark_url}")
+                        except Exception as e:
+                            logger.error(f"Bark通知发送失败: {bark_url}, 新闻: {title[:30]}..., 错误: {str(e)}")
         
         # 发送Server酱通知到所有配置的密钥
         serverchan_keys = notification_config.get('serverchan_keys', [])
