@@ -80,6 +80,20 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3 mb-3" id="unrated-card" style="display: none;">
+        <div class="card text-center h-100 fade-in" style="animation-delay: 0.55s">
+            <div class="card-body d-flex flex-column justify-content-center">
+                <div class="mb-3">
+                    <i class="bi bi-question-circle text-secondary" style="font-size: 2.5rem;"></i>
+                </div>
+                <h5 class="card-title text-secondary mb-2">LLM未评分</h5>
+                <h2 id="unrated-count" class="card-text fw-bold">0</h2>
+                <button class="btn btn-sm btn-outline-secondary mt-2" onclick="retryLLM()" id="retry-llm-btn">
+                    <i class="bi bi-arrow-clockwise"></i> 重新评分
+                </button>
+            </div>
+        </div>
+    </div>
     <!-- 采集倒计时卡片（空闲时显示） -->
     <div class="col-md-9 mb-3" id="countdown-card">
         <div class="card text-center h-100 fade-in" style="animation-delay: 0.5s">
@@ -623,6 +637,22 @@
                     banner.style.display = 'none';
                 }
 
+                // LLM未评分卡片
+                const unratedCard = document.getElementById('unrated-card');
+                const unratedCount = data.unrated_count || 0;
+                if (unratedCount > 0) {
+                    unratedCard.style.display = 'block';
+                    document.getElementById('unrated-count').textContent = unratedCount;
+                } else {
+                    unratedCard.style.display = 'none';
+                }
+
+                // 动态调整倒计时/进度卡片的列宽，避免溢出
+                const sideCards = (data.push_mode === 'scheduled' ? 1 : 0) + (unratedCount > 0 ? 1 : 0);
+                const centerWidth = sideCards === 0 ? 'col-md-12' : sideCards === 1 ? 'col-md-9' : 'col-md-6';
+                document.getElementById('countdown-card').className = document.getElementById('countdown-card').className.replace(/col-md-\d+/, centerWidth);
+                document.getElementById('progress-card').className = document.getElementById('progress-card').className.replace(/col-md-\d+/, centerWidth);
+
                 // 采集进度卡片 与 倒计时卡片 互斥切换
                 const progressCard = document.getElementById('progress-card');
                 const countdownCard = document.getElementById('countdown-card');
@@ -688,6 +718,33 @@
             })
             .catch(error => {
                 showAlert('推送失败: ' + error.message, 'danger');
+            });
+    }
+
+    function retryLLM() {
+        if (!confirm('确定要对未评分的新闻重新进行LLM评分吗？')) return;
+
+        const btn = document.getElementById('retry-llm-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>评分中...';
+
+        fetch('/api/retry_llm', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    setTimeout(updateSystemStatus, 1000);
+                    refreshNews();
+                } else {
+                    showAlert(data.message, 'warning');
+                }
+            })
+            .catch(error => {
+                showAlert('重试失败: ' + error.message, 'danger');
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新评分';
             });
     }
     

@@ -1541,6 +1541,70 @@ class NewsMonitor:
         conn.close()
         return count
 
+    def get_unrated_count(self):
+        """获取LLM打分失败（未评分）的新闻数量"""
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM news WHERE llm_relevance = -1 AND pushed = 0')
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count
+
+    def retry_llm_scoring(self):
+        """对LLM打分失败的新闻重新打分"""
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT site_name, title, translated_title, url, date
+            FROM news WHERE llm_relevance = -1 AND pushed = 0
+            ORDER BY created_at DESC
+        ''')
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return 0
+
+        news_items = [{
+            'site_name': r[0], 'title': r[1], 'translated_title': r[2],
+            'url': r[3], 'date': r[4]
+        } for r in rows]
+
+        logger.info(f"重试LLM打分：共 {len(news_items)} 条未评分新闻")
+        scored_items = self.llm_score_news(news_items)
+
+        # 将打分结果写回数据库
+        updated = 0
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        for item in scored_items:
+            if item.get('llm_relevance', -1) >= 0:
+                cursor.execute('''
+                    UPDATE news SET llm_relevance = ?, llm_reason = ?, translated_title = ?
+                    WHERE site_name = ? AND title = ? AND url = ?
+                ''', (
+                    item['llm_relevance'],
+                    item.get('llm_reason', ''),
+                    item.get('translated_title', ''),
+                    item['site_name'],
+                    item['title'],
+                    item['url']
+                ))
+                if cursor.rowcount > 0:
+                    updated += 1
+        conn.commit()
+        conn.close()
+
+        # 低于阈值的标记为主题无关
+        threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
+        below = [i for i in scored_items if i.get('llm_relevance', -1) >= 0 and i['llm_relevance'] < threshold]
+        if below:
+            self.mark_as_filtered(below)
+            logger.info(f"重试LLM打分：{len(below)} 条低分新闻标记为主题无关")
+
+        logger.info(f"重试LLM打分完成：成功 {updated} 条")
+        return updated
+
     def push_pending_news(self):
         """定时推送：获取所有未推送新闻，统一发送，标记已推送"""
         logger.info("定时推送任务触发")
@@ -2175,6 +2239,22 @@ def api_site_stats():
     except Exception as e:
         return jsonify({'error': str(e)})
 
+@app.route('/api/retry_llm', methods=['POST'])
+def api_retry_llm():
+    """重新对LLM打分失败的新闻进行评分"""
+    try:
+        if monitor.is_running:
+            return jsonify({'success': False, 'message': '正在采集中，请稍后再试'})
+        if not monitor.config.get('llm_filter', {}).get('enabled', False):
+            return jsonify({'success': False, 'message': 'LLM筛选未启用'})
+        unrated = monitor.get_unrated_count()
+        if unrated == 0:
+            return jsonify({'success': True, 'message': '没有需要重试的新闻', 'updated': 0})
+        updated = monitor.retry_llm_scoring()
+        return jsonify({'success': True, 'message': f'重试完成，成功评分 {updated} 条', 'updated': updated})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
 @app.route('/api/restart', methods=['POST'])
 def api_restart():
     """重启服务以应用新配置"""
@@ -2260,7 +2340,8 @@ def api_status():
         'pending_count': monitor.get_pending_count() if push_mode == 'scheduled' else 0,
         'next_push_time': next_push_time.isoformat() if next_push_time else None,
         'scrape_progress': monitor.scrape_progress,
-        'news_version': getattr(monitor, 'news_version', 0)
+        'news_version': getattr(monitor, 'news_version', 0),
+        'unrated_count': monitor.get_unrated_count() if monitor.config.get('llm_filter', {}).get('enabled', False) else 0
     })
 
 @app.route('/api/test_notification', methods=['POST'])
