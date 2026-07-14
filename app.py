@@ -918,6 +918,8 @@ class NewsMonitor:
             logger.info("使用系统 PATH 中的 ChromeDriver")
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.set_page_load_timeout(60)
+        driver.set_script_timeout(30)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         return driver
     
@@ -1137,9 +1139,13 @@ class NewsMonitor:
         
         try:
             logger.info(f"开始抓取RSS {site_config['name']}")
-            
-            # 使用feedparser解析RSS
-            feed = feedparser.parse(site_config['url'])
+
+            # 使用requests带超时获取RSS内容，再交给feedparser解析
+            resp = requests.get(site_config['url'], timeout=30, headers={
+                'User-Agent': 'Mozilla/5.0 (compatible; NewsMonitor/1.0)'
+            })
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
             
             if feed.bozo:
                 logger.warning(f"RSS解析可能有问题: {site_config['name']}")
@@ -1903,10 +1909,13 @@ class NewsMonitor:
                     self.scrape_progress['current_site'] = site_name
                     self.scrape_progress['completed'] += 1
                     try:
-                        news_items = future.result()
+                        news_items = future.result(timeout=180)
                         all_news.extend(news_items)
                         self.update_site_stats(site_name, True, len(news_items), '', response_time)
                         logger.info(f"完成检查站点: {site_name}，获取 {len(news_items)} 条新闻")
+                    except TimeoutError:
+                        self.update_site_stats(site_name, False, 0, '站点抓取超时（超过180秒）', response_time)
+                        logger.error(f"检查站点 {site_name} 超时（180秒），已跳过")
                     except Exception as e:
                         self.update_site_stats(site_name, False, 0, str(e), response_time)
                         logger.error(f"检查站点 {site_name} 失败: {str(e)}")
