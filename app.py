@@ -1663,8 +1663,11 @@ class NewsMonitor:
         for bark_url in bark_urls:
             if bark_url.strip():
                 try:
-                    full_url = f"{bark_url.strip()}/{message}"
-                    response = requests.get(full_url, timeout=10)
+                    response = requests.post(bark_url.strip(), json={
+                        "title": "📰 新闻更新通知",
+                        "body": message,
+                        "group": "新闻监控",
+                    }, timeout=10)
                     if response.status_code == 200:
                         logger.info(f"Bark通知发送成功: {bark_url}")
                     else:
@@ -1727,8 +1730,6 @@ class NewsMonitor:
         # 向后兼容：如果有单个bark_url且不在数组中，也发送
         if notification_config.get('bark_url') and notification_config['bark_url'] not in bark_urls:
             bark_urls.append(notification_config['bark_url'])
-        
-        import urllib.parse
 
         for bark_url in bark_urls:
             if bark_url.strip():
@@ -1769,11 +1770,11 @@ class NewsMonitor:
                                 push_title = f"📰 {title_prefix}（{len(new_news_list)}条）"
                             push_content = "\n".join(chunk)
 
-                            encoded_title = urllib.parse.quote(push_title)
-                            encoded_content = urllib.parse.quote(push_content)
-                            full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
-
-                            response = requests.get(full_url, timeout=10)
+                            response = requests.post(bark_url.strip(), json={
+                                "title": push_title,
+                                "body": push_content,
+                                "group": "新闻监控",
+                            }, timeout=10)
                             if response.status_code == 200:
                                 logger.info(f"Bark定时汇总通知发送成功: {bark_url} ({idx+1}/{total_chunks})")
                             else:
@@ -1799,16 +1800,15 @@ class NewsMonitor:
                                 content_lines.append(f"{translated_title}")
                             push_content = "\n".join(content_lines)
 
-                            encoded_title = urllib.parse.quote(push_title)
-                            encoded_content = urllib.parse.quote(push_content)
-
+                            payload = {
+                                "title": push_title,
+                                "body": push_content,
+                                "group": "新闻监控",
+                            }
                             if url:
-                                encoded_url = urllib.parse.quote(url)
-                                full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}?url={encoded_url}"
-                            else:
-                                full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
+                                payload["url"] = url
 
-                            response = requests.get(full_url, timeout=10)
+                            response = requests.post(bark_url.strip(), json=payload, timeout=10)
 
                             if response.status_code == 200:
                                 logger.info(f"Bark通知发送成功: {bark_url} - {title[:30]}...")
