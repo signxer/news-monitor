@@ -48,6 +48,7 @@ class NewsMonitor:
         self.config = self.load_config()
         self.is_running = False
         self.last_check_time = None
+        self.news_version = 0  # 数据版本号，每次保存新闻后递增
         self.scrape_progress = {
             'current_site': '',
             'completed': 0,
@@ -1811,7 +1812,7 @@ class NewsMonitor:
                     future_to_site[future] = site
                     future_to_start[future] = time.time()
 
-                # 收集结果
+                # 收集结果，每完成一个站点就立即保存
                 for future in as_completed(future_to_site):
                     site = future_to_site[future]
                     site_name = site.get('name', 'Unknown')
@@ -1840,6 +1841,9 @@ class NewsMonitor:
             self.scrape_progress['current_site'] = ''
 
             new_count, new_news_list = self.save_news(all_news)
+
+            # 更新数据版本号，通知前端刷新
+            self.news_version = getattr(self, 'news_version', 0) + 1
 
             if new_count > 0:
                 logger.info(f"发现 {new_count} 条新新闻")
@@ -2138,7 +2142,8 @@ def api_status():
         'push_mode': push_mode,
         'pending_count': monitor.get_pending_count() if push_mode == 'scheduled' else 0,
         'next_push_time': next_push_time.isoformat() if next_push_time else None,
-        'scrape_progress': monitor.scrape_progress
+        'scrape_progress': monitor.scrape_progress,
+        'news_version': getattr(monitor, 'news_version', 0)
     })
 
 @app.route('/api/test_notification', methods=['POST'])

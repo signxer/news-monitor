@@ -215,6 +215,7 @@
     let filterSite = '';
     let filterPushed = '';
     let siteNamesLoaded = false;
+    let newsVersion = 0;  // 跟踪数据版本，有新数据时刷新
 
     // 显示提示信息
     function showAlert(message, type = 'info') {
@@ -652,6 +653,12 @@
                     }
                 } else {
                     progressCard.style.display = 'none';
+                }
+
+                // 检测数据版本变化，自动刷新新闻列表
+                if (data.news_version && data.news_version !== newsVersion) {
+                    newsVersion = data.news_version;
+                    loadPage(currentPage);
                 }
             })
             .catch(error => {
