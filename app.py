@@ -1511,6 +1511,11 @@ class NewsMonitor:
                     logger.debug(f"HTML新闻超出时间范围，跳过: {title[:30]}... (日期: {date_str})")
                     continue
 
+                # 日期归一化：统一存为 YYYY-MM-DD 格式
+                parsed_date = self.parse_date_string(date_str, date_format or None)
+                if parsed_date:
+                    date_str = parsed_date.strftime('%Y-%m-%d')
+
                 # 翻译标题
                 logger.debug(f"开始翻译标题: {title[:30]}...")
                 translated_title = self.translate_text(title)
