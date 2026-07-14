@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
+  build-windows-x64:
     name: Windows x64
     runs-on: windows-latest
     steps:
@@ -36,6 +36,33 @@ jobs:
         with:
           name: windows-x64
           path: dist/news_monitor.exe
+
+  build-windows-x86:
+    name: Windows x86 (Win7+)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.8'
+          architecture: 'x86'
+
+      - name: Install dependencies
+        run: pip install pyinstaller -r requirements.txt
+
+      - name: Build exe
+        run: pyinstaller news_monitor.spec
+
+      - name: Rename exe
+        run: ren dist\news_monitor.exe news_monitor_x86.exe
+        shell: cmd
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86
+          path: dist/news_monitor_x86.exe
 
   build-linux-x64:
     name: Linux x64
@@ -200,7 +227,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: [build-windows, build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64]
+    needs: [build-windows-x64, build-windows-x86, build-linux-x64, build-linux-arm64, build-macos-x64, build-macos-arm64]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     steps:
@@ -221,6 +248,7 @@ jobs:
           prerelease: false
           files: |
             artifacts/windows-x64/*
+            artifacts/windows-x86/*
             artifacts/linux-amd64/*
             artifacts/linux-arm64/*
             artifacts/macos-x64/*
@@ -232,12 +260,13 @@ jobs:
             | 平台 | 文件 |
             |------|------|
             | Windows x64 | `news_monitor.exe` |
+            | Windows x86 (Win7+) | `news_monitor_x86.exe` |
             | Linux x64 | `news-monitor_*_amd64.deb` |
             | Linux arm64 | `news-monitor_*_arm64.deb` |
             | macOS x64 (Intel) | `NewsMonitor-macOS-x64.dmg` |
             | macOS arm64 (Apple Silicon) | `NewsMonitor-macOS-arm64.dmg` |
 
             ### 安装说明
-            - **Windows**: 直接运行 `news_monitor.exe`
+            - **Windows**: 直接运行 `news_monitor.exe`（64位系统）或 `news_monitor_x86.exe`（32位/Win7系统）
             - **Linux deb**: `sudo dpkg -i news-monitor_*.deb && news-monitor`
             - **macOS DMG**: 打开 DMG，将 NewsMonitor 拖到任意位置，双击运行
