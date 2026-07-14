@@ -1611,26 +1611,25 @@ class NewsMonitor:
         if not new_news_list:
             return
 
-        # 构建详细的通知消息
+        # 构建详细的通知消息（完整列表，带URL）
         message_lines = [f"📰 {title_prefix}：发现 {len(new_news_list)} 条新闻\n"]
-        
-        for i, news in enumerate(new_news_list[:5], 1):  # 最多显示5条新闻
+
+        for i, news in enumerate(new_news_list, 1):
             site_name = news.get('site_name', '未知来源')
             title = news.get('title', '无标题')
             translated_title = news.get('translated_title', '')
             url = news.get('url', '')
-            
+
             message_lines.append(f"🔸 {i}. 【{site_name}】")
-            message_lines.append(f"   原标题: {title}")
             if translated_title and translated_title != title:
-                message_lines.append(f"   中文翻译: {translated_title}")
+                message_lines.append(f"   {translated_title}")
+                message_lines.append(f"   {title}")
+            else:
+                message_lines.append(f"   {title}")
             if url:
-                message_lines.append(f"   链接: {url}")
-            message_lines.append("")  # 空行分隔
-        
-        if len(new_news_list) > 5:
-            message_lines.append(f"... 还有 {len(new_news_list) - 5} 条新闻")
-        
+                message_lines.append(f"   {url}")
+            message_lines.append("")
+
         message = "\n".join(message_lines)
         
         # 发送通知
@@ -1777,10 +1776,10 @@ class NewsMonitor:
                     # 纯文本内容
                     msg.attach(MIMEText(message, 'plain', 'utf-8'))
 
-                    # HTML 内容
+                    # HTML 内容（完整列表，带URL）
                     html_lines = ['<html><body style="font-family: sans-serif; padding: 20px;">']
                     html_lines.append(f'<h2>📰 {title_prefix}：{len(new_news_list)} 条新闻</h2>')
-                    for i, news in enumerate(new_news_list[:10], 1):
+                    for i, news in enumerate(new_news_list, 1):
                         site_name = news.get('site_name', '未知来源')
                         title = news.get('title', '无标题')
                         translated_title = news.get('translated_title', '')
@@ -1788,17 +1787,22 @@ class NewsMonitor:
                         llm_reason = news.get('llm_reason', '')
                         html_lines.append(f'<div style="margin-bottom:16px;padding:12px;background:#f8f9fa;border-radius:8px;border-left:4px solid #0d6efd;">')
                         html_lines.append(f'<div style="color:#666;font-size:13px;margin-bottom:4px;">{i}. 【{site_name}】</div>')
-                        if url:
-                            html_lines.append(f'<a href="{url}" style="color:#0d6efd;text-decoration:none;font-weight:bold;font-size:15px;">{title}</a>')
-                        else:
-                            html_lines.append(f'<div style="font-weight:bold;font-size:15px;">{title}</div>')
                         if translated_title and translated_title != title:
-                            html_lines.append(f'<div style="color:#333;margin-top:4px;">{translated_title}</div>')
+                            html_lines.append(f'<div style="font-weight:bold;font-size:15px;">{translated_title}</div>')
+                            if url:
+                                html_lines.append(f'<a href="{url}" style="color:#0d6efd;text-decoration:none;font-size:13px;">{title}</a>')
+                            else:
+                                html_lines.append(f'<div style="color:#555;font-size:13px;">{title}</div>')
+                        else:
+                            if url:
+                                html_lines.append(f'<a href="{url}" style="color:#0d6efd;text-decoration:none;font-weight:bold;font-size:15px;">{title}</a>')
+                            else:
+                                html_lines.append(f'<div style="font-weight:bold;font-size:15px;">{title}</div>')
+                        if url:
+                            html_lines.append(f'<div style="color:#0d6efd;font-size:12px;margin-top:4px;"><a href="{url}" style="color:#0d6efd;">{url}</a></div>')
                         if llm_reason:
                             html_lines.append(f'<div style="color:#888;font-size:12px;margin-top:4px;">🤖 {llm_reason}</div>')
                         html_lines.append('</div>')
-                    if len(new_news_list) > 10:
-                        html_lines.append(f'<p style="color:#666;">... 还有 {len(new_news_list) - 10} 条新闻</p>')
                     html_lines.append('</body></html>')
                     msg.attach(MIMEText('\n'.join(html_lines), 'html', 'utf-8'))
 
