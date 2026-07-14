@@ -1745,8 +1745,8 @@ class NewsMonitor:
                                 line += f"\n   {u}"
                             item_lines.append(line)
 
-                        # 按4KB限制分片（Bark限制约4KB）
-                        max_bytes = 3800  # 留一些余量给URL编码和标题
+                        # 按URL长度限制分片（中文URL编码后膨胀约3倍，需保守估算）
+                        max_bytes = 1000
                         chunks = []
                         current_chunk = []
                         current_size = 0
