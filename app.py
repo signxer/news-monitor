@@ -997,6 +997,48 @@ class NewsMonitor:
 
         return False
 
+    def _parse_llm_json(self, content):
+        """从LLM返回内容中提取JSON对象，过滤掉解释性文字"""
+        if not content:
+            return None
+
+        # 去除 markdown 代码块标记
+        content = re.sub(r'```(?:json)?\s*', '', content)
+        content = re.sub(r'```', '', content)
+        content = content.strip()
+
+        # 方法1：尝试直接解析整个内容
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            pass
+
+        # 方法2：提取第一个完整的 JSON 对象（支持嵌套）
+        depth = 0
+        start = -1
+        for i, ch in enumerate(content):
+            if ch == '{':
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    try:
+                        return json.loads(content[start:i+1])
+                    except json.JSONDecodeError:
+                        start = -1
+
+        # 方法3：正则兜底（简单结构）
+        match = re.search(r'\{[^{}]+\}', content)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
     def llm_score_news(self, news_items):
         """使用大模型对新闻打分并翻译（前置打分，不过滤）
 
@@ -1019,12 +1061,16 @@ class NewsMonitor:
             return news_items
 
         system_prompt = (
-            '你是一个新闻筛选和翻译助手。请根据用户提供的筛选主题，判断新闻标题的相关性，并将英文标题翻译为中文。'
-            'translation字段必须为非空的中文翻译，不得留空或返回原文。'
-            '请严格以以下JSON格式返回，不要包含任何其他内容：'
-            '{"relevance": <0-100的整数，表示与筛选主题的相关性>,'
-            '"reason": "<简短的相关性判断理由，中文>",'
-            '"translation": "<标题的中文翻译，必须非空>"}'
+            '你是一个新闻筛选和翻译助手。根据用户提供的筛选主题，判断新闻标题的相关性，并将英文标题翻译为中文。\n'
+            '\n'
+            '【输出要求】\n'
+            '- 只输出一个JSON对象，不要输出任何其他文字、解释、说明或markdown标记\n'
+            '- 不要输出```json```代码块标记\n'
+            '- 不要在JSON前后添加任何内容\n'
+            '- translation字段必须为非空的中文翻译，不得留空或返回原文\n'
+            '\n'
+            '【JSON格式】\n'
+            '{"relevance":0-100的整数,"reason":"中文理由","translation":"中文翻译"}'
         )
 
         for item in news_items:
@@ -1056,9 +1102,8 @@ class NewsMonitor:
                     if response.status_code == 200:
                         result = response.json()
                         content = result['choices'][0]['message']['content']
-                        json_match = re.search(r'\{[^}]+\}', content)
-                        if json_match:
-                            llm_result = json.loads(json_match.group())
+                        llm_result = self._parse_llm_json(content)
+                        if llm_result:
                             relevance = llm_result.get('relevance', 0)
                             translated = (llm_result.get('translation') or '').strip()
                             if not translated or translated == title:
@@ -1070,7 +1115,7 @@ class NewsMonitor:
                             success = True
                             break
                         else:
-                            logger.warning(f"LLM返回格式异常(第{attempt}次): {content}")
+                            logger.warning(f"LLM返回格式异常(第{attempt}次): {content[:200]}")
                     else:
                         logger.error(f"LLM API请求失败(第{attempt}次): {response.status_code}")
                 except Exception as e:
