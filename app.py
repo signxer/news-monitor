@@ -2011,16 +2011,18 @@ def api_news():
         # 构建 WHERE 条件
         conditions = []
         params = []
+        llm_threshold = monitor.config.get('llm_filter', {}).get('relevance_threshold', 60)
         if site_filter:
             conditions.append('site_name = ?')
             params.append(site_filter)
         if pushed_filter == '1':
             conditions.append('pushed = 1')
         elif pushed_filter == '0':
+            # 未推送：排除已推送和主题无关
             conditions.append('pushed = 0')
+            conditions.append(f'(llm_relevance < 0 OR llm_relevance >= {llm_threshold})')
         elif pushed_filter == 'filtered':
             # 主题无关：未推送且LLM分数低于阈值
-            llm_threshold = monitor.config.get('llm_filter', {}).get('relevance_threshold', 60)
             conditions.append('pushed = 0')
             conditions.append('llm_relevance >= 0')
             conditions.append(f'llm_relevance < {llm_threshold}')
