@@ -3,6 +3,7 @@
 
 import os
 import re
+import copy
 import json
 import time
 import threading
@@ -59,9 +60,10 @@ class NewsMonitor:
         
     def load_config(self):
         """加载配置文件"""
-        default_config = {
+        self.default_config = {
             'check_interval': 60,  # 检查间隔（分钟）
             'concurrent_workers': 5,  # 并发检查数量
+            'date_filter_days': 0,  # 日期过滤天数，0=不过滤，N=只抓取最近N天的新闻
             'notification': {
                 'bark_urls': [],  # 支持多个Bark地址
                 'serverchan_keys': [],  # 支持多个Server酱密钥
@@ -188,7 +190,7 @@ class NewsMonitor:
                     'url': 'https://www.hoover.org/research/type/working-papers',
                     'site_type': 'html',
                     'title_selector': 'div > div.content > h6',
-                    'date_selector': 'span.date',
+                    'date_selector': '.name-date span.date',
                     'date_format': '%B %-d, %Y',
                     'enabled': True
                 },
@@ -197,8 +199,8 @@ class NewsMonitor:
                     'url': 'https://www.ecb.europa.eu/press/research-publications/working-papers/html/index.en.html',
                     'site_type': 'html',
                     'title_selector': 'div.title > a',
-                    'date_selector': 'dt > div.date',
-                    'date_format': '%Y-%m-%d',
+                    'date_selector': '.foedb-plugin dl dt',
+                    'date_format': '%d %B %Y',
                     'enabled': True
                 },
                 {
@@ -215,8 +217,8 @@ class NewsMonitor:
                     'url': 'https://www.nber.org/papers?page=1&perPage=50&sortBy=public_date',
                     'site_type': 'html',
                     'title_selector': 'div.digest-card__title > a',
-                    'date_selector': 'div.digest-card__date > span:nth-child(1)',
-                    'date_format': '%Y-%m-%d',
+                    'date_selector': '.digest-card__date .digest-card__label',
+                    'date_format': '%B %Y',
                     'enabled': True
                 },
                 {
@@ -260,7 +262,7 @@ class NewsMonitor:
                     'url': 'https://www.boj.or.jp/en/research/wps_rev/index.htm',
                     'site_type': 'html',
                     'title_selector': 'tbody > tr > td:nth-child(4)',
-                    'date_selector': 'tbody > tr > td:nth-child(2)',
+                    'date_selector': 'li.news_list-li time.time',
                     'date_format': '%Y-%m-%d',
                     'enabled': True
                 },
@@ -314,8 +316,8 @@ class NewsMonitor:
                     'url': 'https://www.aof.org.hk/research/HKIMR/publications-and-research/working-papers',
                     'site_type': 'html',
                     'title_selector': 'div.mbm.papertitle',
-                    'date_selector': 'div.mbm.papertitle',
-                    'date_format': '%Y-%m-%d',
+                    'date_selector': '',
+                    'date_format': '',
                     'enabled': True
                 },
                 {
@@ -332,8 +334,8 @@ class NewsMonitor:
                     'url': 'https://www.iif.com/Key-Topics/Debt',
                     'site_type': 'html',
                     'title_selector': 'h4.article--title > a',
-                    'date_selector': 'span.article--date > time',
-                    'date_format': '%Y-%m-%d',
+                    'date_selector': 'span.article--date',
+                    'date_format': '%B %-d, %Y',
                     'enabled': True
                 },
                 {
@@ -341,8 +343,8 @@ class NewsMonitor:
                     'url': 'https://www.iif.com/Key-Topics/Sustainable-Finance',
                     'site_type': 'html',
                     'title_selector': 'h4.article--title > a',
-                    'date_selector': 'span.article--date > time',
-                    'date_format': '%Y-%m-%d',
+                    'date_selector': 'span.article--date',
+                    'date_format': '%B %-d, %Y',
                     'enabled': True
                 },
                 {
@@ -350,8 +352,8 @@ class NewsMonitor:
                     'url': 'https://www.iif.com/Key-Topics/Digital-Finance',
                     'site_type': 'html',
                     'title_selector': 'h4.article--title > a',
-                    'date_selector': 'span.article--date > time',
-                    'date_format': '%Y-%m-%d',
+                    'date_selector': 'span.article--date',
+                    'date_format': '%B %-d, %Y',
                     'enabled': True
                 },
                 {
@@ -701,21 +703,21 @@ class NewsMonitor:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
                 # 合并默认配置
-                for key in default_config:
+                for key in self.default_config:
                     if key not in config:
-                        config[key] = default_config[key]
-                
+                        config[key] = self.default_config[key]
+
                 # 向后兼容：将单个地址转换为数组格式
                 if 'notification' in config:
                     notification = config['notification']
-                    
+
                     # 处理Bark URL
                     if 'bark_urls' not in notification:
                         notification['bark_urls'] = []
                     if 'bark_url' in notification and notification['bark_url']:
                         if notification['bark_url'] not in notification['bark_urls']:
                             notification['bark_urls'].append(notification['bark_url'])
-                    
+
                     # 处理Server酱密钥
                     if 'serverchan_keys' not in notification:
                         notification['serverchan_keys'] = []
@@ -725,30 +727,30 @@ class NewsMonitor:
 
                     # 处理邮件配置
                     if 'email' not in notification:
-                        notification['email'] = default_config['notification']['email']
+                        notification['email'] = self.default_config['notification']['email']
                     else:
-                        for k, v in default_config['notification']['email'].items():
+                        for k, v in self.default_config['notification']['email'].items():
                             if k not in notification['email']:
                                 notification['email'][k] = v
 
                 # 向后兼容：补全 llm_filter 缺失字段
                 if 'llm_filter' in config:
-                    for k, v in default_config['llm_filter'].items():
+                    for k, v in self.default_config['llm_filter'].items():
                         if k not in config['llm_filter']:
                             config['llm_filter'][k] = v
 
                 # 向后兼容：补全 push 缺失字段
                 if 'push' not in config:
-                    config['push'] = default_config['push']
+                    config['push'] = self.default_config['push']
                 else:
-                    for k, v in default_config['push'].items():
+                    for k, v in self.default_config['push'].items():
                         if k not in config['push']:
                             config['push'][k] = v
 
                 return config
         except FileNotFoundError:
-            self.save_config(default_config)
-            return default_config
+            self.save_config(self.default_config)
+            return self.default_config
     
     def save_config(self, config=None):
         """保存配置文件"""
@@ -757,7 +759,18 @@ class NewsMonitor:
         config_path = str(get_config_path())
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
-    
+
+    def get_default_news_sites(self):
+        """获取默认新闻站点列表"""
+        return copy.deepcopy(self.default_config.get('news_sites', []))
+
+    def restore_default_news_sites(self):
+        """恢复默认新闻站点配置，返回站点数量"""
+        default_sites = self.get_default_news_sites()
+        self.config['news_sites'] = default_sites
+        self.save_config()
+        return len(default_sites)
+
     def init_database(self):
         """初始化数据库"""
         conn = sqlite3.connect(str(get_db_path()))
@@ -1132,6 +1145,68 @@ class NewsMonitor:
 
         return news_items
 
+    def parse_date_string(self, date_str, date_format=None):
+        """解析各种格式的日期字符串，返回 datetime 对象，解析失败返回 None"""
+        if not date_str:
+            return None
+
+        date_str = date_str.strip()
+
+        # 如果指定了格式，优先使用
+        if date_format:
+            try:
+                return datetime.strptime(date_str, date_format)
+            except (ValueError, TypeError):
+                pass
+
+        # 常见日期格式列表（从精确到模糊）
+        formats = [
+            '%Y-%m-%d',              # 2025-06-20
+            '%Y/%m/%d',              # 2025/06/20
+            '%Y-%m-%dT%H:%M:%S',     # 2025-06-20T14:30:00
+            '%Y-%m-%dT%H:%M:%SZ',    # 2025-06-20T14:30:00Z
+            '%Y-%m-%d %H:%M:%S',     # 2025-06-20 14:30:00
+            '%Y-%m-%d %H:%M',        # 2025-06-20 14:30
+            '%Y.%m.%d',              # 2025.06.20
+            '%b %d, %Y',             # Jun 20, 2025
+            '%B %d, %Y',             # June 20, 2025
+            '%d %b %Y',              # 20 Jun 2025
+            '%d %B %Y',              # 20 June 2025
+            '%m/%d/%Y',              # 06/20/2025
+            '%d/%m/%Y',              # 20/06/2025
+            '%Y年%m月%d日',           # 2025年06月20日
+            '%m-%d-%Y',              # 06-20-2025
+        ]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(date_str, fmt)
+            except (ValueError, TypeError):
+                continue
+
+        # 尝试用正则提取年月日
+        m = re.search(r'(\d{4})[/-年](\d{1,2})[/-月](\d{1,2})', date_str)
+        if m:
+            try:
+                return datetime(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except (ValueError, TypeError):
+                pass
+
+        return None
+
+    def is_within_date_filter(self, date_str, date_format=None):
+        """检查日期是否在配置的时间范围内，返回 True 表示应保留"""
+        days = self.config.get('date_filter_days', 0)
+        if days <= 0:
+            return True  # 不过滤
+
+        parsed = self.parse_date_string(date_str, date_format)
+        if not parsed:
+            return True  # 解析失败时保留（不丢弃）
+
+        cutoff = datetime.now() - timedelta(days=days)
+        return parsed >= cutoff
+
     def scrape_rss_site(self, site_config):
         """抓取RSS新闻网站"""
         if not site_config.get('enabled', True):
@@ -1173,10 +1248,15 @@ class NewsMonitor:
                         date_str = datetime(*entry.updated_parsed[:6]).strftime('%Y-%m-%d')
                     except:
                         pass
-                
+
+                # 日期过滤：跳过超出时间范围的新闻
+                if not self.is_within_date_filter(date_str):
+                    logger.debug(f"RSS新闻超出时间范围，跳过: {title[:30]}... (日期: {date_str})")
+                    continue
+
                 # 翻译标题
                 translated_title = self.translate_text(title)
-                
+
                 news_items.append({
                     'site_name': site_config['name'],
                     'title': title,
@@ -1401,19 +1481,36 @@ class NewsMonitor:
                             if date_element:
                                 break
                         if date_element:
-                            date_str = date_element.get_text().strip()
-                            logger.debug(f"提取到日期: {date_str}")
+                            # 优先读取 <time> 标签的 datetime 属性（更可靠）
+                            datetime_attr = date_element.get('datetime', '').strip()
+                            if datetime_attr:
+                                date_str = datetime_attr
+                                logger.debug(f"提取到日期（datetime属性）: {date_str}")
+                            else:
+                                date_str = date_element.get_text().strip()
+                                logger.debug(f"提取到日期: {date_str}")
                         else:
                             # 回退：尝试 find_next（仅对简单标签名有效）
                             date_element = element.find_next(site_config['date_selector'])
                             if date_element:
-                                date_str = date_element.get_text().strip()
-                                logger.debug(f"提取到日期（find_next回退）: {date_str}")
+                                datetime_attr = date_element.get('datetime', '').strip()
+                                if datetime_attr:
+                                    date_str = datetime_attr
+                                    logger.debug(f"提取到日期（find_next回退, datetime属性）: {date_str}")
+                                else:
+                                    date_str = date_element.get_text().strip()
+                                    logger.debug(f"提取到日期（find_next回退）: {date_str}")
                             else:
                                 logger.debug("未找到日期元素")
                 except Exception as date_e:
                     logger.debug(f"日期提取失败: {str(date_e)}")
-                
+
+                # 日期过滤：跳过超出时间范围的新闻
+                date_format = site_config.get('date_format', '')
+                if not self.is_within_date_filter(date_str, date_format or None):
+                    logger.debug(f"HTML新闻超出时间范围，跳过: {title[:30]}... (日期: {date_str})")
+                    continue
+
                 # 翻译标题
                 logger.debug(f"开始翻译标题: {title[:30]}...")
                 translated_title = self.translate_text(title)
@@ -1421,7 +1518,7 @@ class NewsMonitor:
                     logger.debug(f"翻译结果: {translated_title[:30]}...")
                 else:
                     logger.debug("标题未翻译或翻译失败")
-                
+
                 news_items.append({
                     'site_name': site_config['name'],
                     'title': title,
@@ -2115,6 +2212,15 @@ def api_config():
             return jsonify({'success': True, 'message': '配置保存成功'})
         except Exception as e:
             return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/config/restore-news-sites', methods=['POST'])
+def api_restore_news_sites():
+    """恢复默认新闻站点配置"""
+    try:
+        count = monitor.restore_default_news_sites()
+        return jsonify({'success': True, 'count': count, 'message': f'已恢复 {count} 个默认网站配置'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
 
 @app.route('/api/news')
 def api_news():

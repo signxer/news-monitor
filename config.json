@@ -84,8 +84,8 @@
       "url": "https://www.federalreserve.gov/feeds/ifdp.xml"
     },
     {
-      "date_format": "%B %-d, %Y",
-      "date_selector": "span.date",
+      "date_format": "%B %d, %Y",
+      "date_selector": ".name-date span.date",
       "enabled": true,
       "name": "Hoover",
       "site_type": "html",
@@ -93,8 +93,8 @@
       "url": "https://www.hoover.org/research/type/working-papers"
     },
     {
-      "date_format": "%Y-%m-%d",
-      "date_selector": "dt > div.date",
+      "date_format": "%d %B %Y",
+      "date_selector": ".foedb-plugin dl dt",
       "enabled": true,
       "name": "欧洲央行",
       "site_type": "html",
@@ -111,8 +111,8 @@
       "url": "https://www.brookings.edu/programs/economic-studies/explore-research-and-commentary/"
     },
     {
-      "date_format": "%Y-%m-%d",
-      "date_selector": "div.digest-card__date > span:nth-child(1)",
+      "date_format": "%B %Y",
+      "date_selector": ".digest-card__date .digest-card__label",
       "enabled": true,
       "name": "美国经济研究局",
       "site_type": "html",
@@ -157,7 +157,7 @@
     },
     {
       "date_format": "%Y-%m-%d",
-      "date_selector": "tbody > tr > td:nth-child(2)",
+      "date_selector": "li.news_list-li time.time",
       "enabled": true,
       "name": "日本央行",
       "site_type": "html",
@@ -211,7 +211,7 @@
     },
     {
       "date_format": "%Y-%m-%d",
-      "date_selector": "time",
+      "date_selector": "",
       "enabled": true,
       "name": "香港金融学院（HKIMR）",
       "site_type": "html",
@@ -228,8 +228,8 @@
       "url": "https://www.library.hbs.edu/working-knowledge/collections/finance-and-investing"
     },
     {
-      "date_format": "%Y-%m-%d",
-      "date_selector": "span.article--date > time",
+      "date_format": "%B %-d, %Y",
+      "date_selector": "span.article--date",
       "enabled": true,
       "name": "国际金融协会（IIF）-Debt",
       "site_type": "html",
@@ -237,8 +237,8 @@
       "url": "https://www.iif.com/Key-Topics/Debt"
     },
     {
-      "date_format": "%Y-%m-%d",
-      "date_selector": "span.article--date > time",
+      "date_format": "%B %-d, %Y",
+      "date_selector": "span.article--date",
       "enabled": true,
       "name": "国际金融协会（IIF）-Sustainable-Finance",
       "site_type": "html",
@@ -246,8 +246,8 @@
       "url": "https://www.iif.com/Key-Topics/Sustainable-Finance"
     },
     {
-      "date_format": "%Y-%m-%d",
-      "date_selector": "span.article--date > time",
+      "date_format": "%B %-d, %Y",
+      "date_selector": "span.article--date",
       "enabled": true,
       "name": "国际金融协会（IIF）-Digital-Finance",
       "site_type": "html",

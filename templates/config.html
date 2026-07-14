@@ -37,6 +37,16 @@
                             <div class="form-text">设置自动检查新闻的时间间隔</div>
                         </div>
                     </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="date-filter-days" class="form-label fw-semibold">
+                                <i class="bi bi-calendar-range text-warning me-1"></i>
+                                日期过滤（天）
+                            </label>
+                            <input type="number" class="form-control" id="date-filter-days" min="0" max="365" value="{{ config.get('date_filter_days', 0) }}">
+                            <div class="form-text">只抓取最近 N 天内的新闻，0 表示不过滤（默认）</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -391,9 +401,14 @@
                     <i class="bi bi-globe text-success me-2"></i>
                     新闻网站配置
                 </h5>
-                <button type="button" class="btn btn-sm btn-primary" onclick="addNewsSite()">
-                    <i class="bi bi-plus-circle"></i> 添加网站
-                </button>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-warning me-1" onclick="restoreDefaultSites()" title="恢复为内置的默认网站列表">
+                        <i class="bi bi-arrow-counterclockwise"></i> 恢复默认
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addNewsSite()">
+                        <i class="bi bi-plus-circle"></i> 添加网站
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div id="news-sites-container">
@@ -687,7 +702,35 @@
             renderNewsSites();
         }
     }
-    
+
+    // 恢复默认新闻网站配置
+    function restoreDefaultSites() {
+        const currentCount = config.news_sites ? config.news_sites.length : 0;
+        if (!confirm(`确定要恢复默认网站配置吗？\n\n当前有 ${currentCount} 个网站，将被替换为内置默认列表。\n其他设置（推送、翻译、LLM筛选等）不受影响。`)) {
+            return;
+        }
+
+        fetch('/api/config/restore-news-sites', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // 更新本地config并刷新列表
+                    fetch('/api/config')
+                        .then(r => r.json())
+                        .then(newConfig => {
+                            config.news_sites = newConfig.news_sites;
+                            renderNewsSites();
+                            showAlert(`✅ ${data.message}`, 'success');
+                        });
+                } else {
+                    showAlert('❌ 恢复失败: ' + data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                showAlert('❌ 恢复失败: ' + error.message, 'danger');
+            });
+    }
+
     // ========== 关键词筛选 ==========
 
     // 渲染关键词规则列表
@@ -1133,6 +1176,7 @@
     function collectFormData() {
         // 基本设置
         config.check_interval = parseInt(document.getElementById('check-interval').value);
+        config.date_filter_days = parseInt(document.getElementById('date-filter-days').value) || 0;
 
         // 推送模式设置
         if (!config.push) config.push = {};
