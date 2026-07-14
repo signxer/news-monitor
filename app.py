@@ -1515,6 +1515,23 @@ class NewsMonitor:
         conn.commit()
         conn.close()
 
+    def mark_as_filtered(self, news_list):
+        """标记新闻为主题无关（pushed=2）"""
+        if not news_list:
+            return
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+        for item in news_list:
+            try:
+                cursor.execute('''
+                    UPDATE news SET pushed = 2
+                    WHERE site_name = ? AND title = ? AND url = ?
+                ''', (item['site_name'], item['title'], item['url']))
+            except Exception as e:
+                logger.error(f"标记主题无关失败: {str(e)}")
+        conn.commit()
+        conn.close()
+
     def get_pending_count(self):
         """获取待推送新闻数量"""
         conn = sqlite3.connect(str(get_db_path()))
@@ -1552,10 +1569,10 @@ class NewsMonitor:
         threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
         if self.config.get('llm_filter', {}).get('enabled', False):
             before = len(filtered)
-            # 低于阈值的新闻：标记为已推送
+            # 低于阈值的新闻：标记为主题无关（pushed=2）
             below_threshold = [n for n in filtered if n.get('llm_relevance', -1) >= 0 and n.get('llm_relevance', 0) < threshold]
             if below_threshold:
-                self.mark_as_pushed(below_threshold)
+                self.mark_as_filtered(below_threshold)
                 logger.info(f"定时推送：{len(below_threshold)} 条低分新闻标记为主题无关")
             filtered = [n for n in filtered if n.get('llm_relevance', -1) < 0 or n.get('llm_relevance', 0) >= threshold]
             logger.info(f"定时推送：LLM阈值筛选 {before} -> {len(filtered)} 条 (阈值: {threshold})")
@@ -1946,10 +1963,10 @@ class NewsMonitor:
                 threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
                 if self.config.get('llm_filter', {}).get('enabled', False):
                     before = len(filtered_news)
-                    # 低于阈值的新闻：标记为已推送（不进入待推送队列）
+                    # 低于阈值的新闻：标记为主题无关（pushed=2），不进入待推送队列
                     below_threshold = [n for n in filtered_news if n.get('llm_relevance', -1) >= 0 and n.get('llm_relevance', 0) < threshold]
                     if below_threshold:
-                        self.mark_as_pushed(below_threshold)
+                        self.mark_as_filtered(below_threshold)
                         logger.info(f"LLM筛选：{len(below_threshold)} 条低分新闻标记为主题无关")
                     filtered_news = [n for n in filtered_news if n.get('llm_relevance', -1) < 0 or n.get('llm_relevance', 0) >= threshold]
                     logger.info(f"LLM阈值筛选: {before} -> {len(filtered_news)} 条 (阈值: {threshold})")
@@ -2042,7 +2059,7 @@ def api_news():
         per_page = request.args.get('per_page', 20, type=int)
         per_page = min(per_page, 100)  # 上限100条
         site_filter = request.args.get('site', '')
-        pushed_filter = request.args.get('pushed', '')  # '' | '0' | '1'
+        pushed_filter = request.args.get('pushed', '')  # '' | '0' | '1' | '2' | 'filtered'
 
         offset = (page - 1) * per_page
 
@@ -2058,15 +2075,15 @@ def api_news():
             params.append(site_filter)
         if pushed_filter == '1':
             conditions.append('pushed = 1')
+        elif pushed_filter == '2':
+            conditions.append('pushed = 2')
         elif pushed_filter == '0':
             # 未推送：排除已推送和主题无关
             conditions.append('pushed = 0')
             conditions.append(f'(llm_relevance < 0 OR llm_relevance >= {llm_threshold})')
         elif pushed_filter == 'filtered':
-            # 主题无关：未推送且LLM分数低于阈值
-            conditions.append('pushed = 0')
-            conditions.append('llm_relevance >= 0')
-            conditions.append(f'llm_relevance < {llm_threshold}')
+            # 主题无关：pushed=2 或（旧数据：未推送且LLM分数低于阈值）
+            conditions.append(f'''(pushed = 2 OR (pushed = 0 AND llm_relevance >= 0 AND llm_relevance < {llm_threshold}))''')
         where_clause = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
 
         # 总数
@@ -2094,9 +2111,11 @@ def api_news():
         news_list = []
         for item in news:
             relevance = item[7]
-            pushed = bool(item[6])
-            # 推送状态：已推送 / 主题无关不推送 / 未推送
-            if pushed:
+            pushed = item[6]  # 0=未推送, 1=已推送, 2=主题无关
+            # 推送状态：已推送(1) / 主题无关(2) / 未推送(0)
+            if pushed == 2:
+                push_status = 'filtered'
+            elif pushed == 1:
                 push_status = 'pushed'
             elif relevance >= 0 and relevance < llm_threshold:
                 push_status = 'filtered'
