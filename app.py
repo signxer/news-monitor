@@ -1647,27 +1647,55 @@ class NewsMonitor:
         for bark_url in bark_urls:
             if bark_url.strip():
                 if title_prefix == '定时新闻汇总':
-                    # 定时推送模式：发送一条汇总通知
+                    # 定时推送模式：构建完整列表，按4KB分片发送
                     try:
-                        push_title = f"📰 {title_prefix}"
-                        # 构建汇总内容
-                        summary_lines = []
-                        for i, news in enumerate(new_news_list[:10], 1):
+                        # 构建每条新闻的内容（带URL）
+                        item_lines = []
+                        for i, news in enumerate(new_news_list, 1):
                             t = news.get('translated_title') or news.get('title', '')
-                            summary_lines.append(f"{i}. {t}")
-                        if len(new_news_list) > 10:
-                            summary_lines.append(f"... 还有 {len(new_news_list) - 10} 条")
-                        push_content = f"共 {len(new_news_list)} 条新闻\n" + "\n".join(summary_lines)
+                            u = news.get('url', '')
+                            line = f"{i}. {t}"
+                            if u:
+                                line += f"\n   {u}"
+                            item_lines.append(line)
 
-                        encoded_title = urllib.parse.quote(push_title)
-                        encoded_content = urllib.parse.quote(push_content)
-                        full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
+                        # 按4KB限制分片（Bark限制约4KB）
+                        max_bytes = 3800  # 留一些余量给URL编码和标题
+                        chunks = []
+                        current_chunk = []
+                        current_size = 0
+                        for line in item_lines:
+                            line_bytes = len(line.encode('utf-8')) + 1  # +1 for newline
+                            if current_size + line_bytes > max_bytes and current_chunk:
+                                chunks.append(current_chunk)
+                                current_chunk = []
+                                current_size = 0
+                            current_chunk.append(line)
+                            current_size += line_bytes
+                        if current_chunk:
+                            chunks.append(current_chunk)
 
-                        response = requests.get(full_url, timeout=10)
-                        if response.status_code == 200:
-                            logger.info(f"Bark定时汇总通知发送成功: {bark_url}")
-                        else:
-                            logger.warning(f"Bark定时汇总通知发送失败，状态码: {response.status_code}")
+                        total_chunks = len(chunks)
+                        for idx, chunk in enumerate(chunks):
+                            if total_chunks > 1:
+                                push_title = f"📰 {title_prefix} ({idx+1}/{total_chunks})"
+                            else:
+                                push_title = f"📰 {title_prefix}（{len(new_news_list)}条）"
+                            push_content = "\n".join(chunk)
+
+                            encoded_title = urllib.parse.quote(push_title)
+                            encoded_content = urllib.parse.quote(push_content)
+                            full_url = f"{bark_url.strip()}/{encoded_title}/{encoded_content}"
+
+                            response = requests.get(full_url, timeout=10)
+                            if response.status_code == 200:
+                                logger.info(f"Bark定时汇总通知发送成功: {bark_url} ({idx+1}/{total_chunks})")
+                            else:
+                                logger.warning(f"Bark定时汇总通知发送失败，状态码: {response.status_code}")
+
+                            # 多条之间稍作延迟，避免被限流
+                            if idx < total_chunks - 1:
+                                time.sleep(0.5)
                     except Exception as e:
                         logger.error(f"Bark定时汇总通知发送失败: {bark_url}, 错误: {str(e)}")
                 else:
