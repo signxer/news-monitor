@@ -12,11 +12,6 @@
             </h1>
             <p class="text-muted mb-0">管理新闻监控系统的各项设置</p>
         </div>
-        <div class="btn-toolbar mb-2 mb-md-0">
-            <button type="button" class="btn btn-success btn-lg" onclick="saveConfig()">
-                <i class="bi bi-check-lg"></i> 保存配置
-            </button>
-        </div>
     </div>
 </div>
 
@@ -423,8 +418,32 @@
     </div>
 </div>
 
-<!-- 操作结果提示 -->
-<div id="alert-container"></div>
+{% endblock %}
+
+{% block floating %}
+<!-- 悬浮保存按钮 -->
+<div class="position-fixed bottom-0 end-0 p-4" style="z-index: 1050;">
+    <button type="button" class="btn btn-success btn-lg shadow-lg px-4 py-3" onclick="saveConfig()" id="save-btn"
+            style="border-radius: 50px; font-size: 1.1rem; transition: all 0.3s;">
+        <i class="bi bi-check-lg me-1"></i> 保存配置
+    </button>
+</div>
+
+<!-- 悬浮提示容器 -->
+<div class="position-fixed top-0 end-0 p-3" style="z-index: 1060; min-width: 320px; max-width: 420px;">
+    <div id="alert-container"></div>
+</div>
+
+<style>
+    #save-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0.5rem 1rem rgba(25, 135, 84, 0.4) !important;
+    }
+    #save-btn.saving {
+        opacity: 0.7;
+        pointer-events: none;
+    }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -1217,9 +1236,13 @@
     
     // 保存配置
     function saveConfig() {
+        const btn = document.getElementById('save-btn');
+        btn.classList.add('saving');
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> 保存中...';
+
         try {
             collectFormData();
-            
+
             fetch('/api/config', {
                 method: 'POST',
                 headers: {
@@ -1230,16 +1253,31 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showAlert('配置保存成功！', 'success');
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> 已保存';
+                    btn.classList.remove('btn-success');
+                    btn.classList.add('btn-primary');
+                    showAlert('✅ 配置保存成功！', 'success');
+                    setTimeout(() => {
+                        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> 保存配置';
+                        btn.classList.remove('btn-primary');
+                        btn.classList.add('btn-success');
+                        btn.classList.remove('saving');
+                    }, 2000);
                 } else {
-                    showAlert('保存失败: ' + data.message, 'danger');
+                    showAlert('❌ 保存失败: ' + data.message, 'danger');
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> 保存配置';
+                    btn.classList.remove('saving');
                 }
             })
             .catch(error => {
-                showAlert('保存失败: ' + error.message, 'danger');
+                showAlert('❌ 保存失败: ' + error.message, 'danger');
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> 保存配置';
+                btn.classList.remove('saving');
             });
         } catch (error) {
-            showAlert('配置数据错误: ' + error.message, 'danger');
+            showAlert('❌ 配置数据错误: ' + error.message, 'danger');
+            btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> 保存配置';
+            btn.classList.remove('saving');
         }
     }
     

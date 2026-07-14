@@ -1546,6 +1546,11 @@ class NewsMonitor:
         threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
         if self.config.get('llm_filter', {}).get('enabled', False):
             before = len(filtered)
+            # 低于阈值的新闻：标记为已推送
+            below_threshold = [n for n in filtered if n.get('llm_relevance', -1) >= 0 and n.get('llm_relevance', 0) < threshold]
+            if below_threshold:
+                self.mark_as_pushed(below_threshold)
+                logger.info(f"定时推送：{len(below_threshold)} 条低分新闻标记为主题无关")
             filtered = [n for n in filtered if n.get('llm_relevance', -1) < 0 or n.get('llm_relevance', 0) >= threshold]
             logger.info(f"定时推送：LLM阈值筛选 {before} -> {len(filtered)} 条 (阈值: {threshold})")
 
@@ -1900,6 +1905,11 @@ class NewsMonitor:
                 threshold = self.config.get('llm_filter', {}).get('relevance_threshold', 60)
                 if self.config.get('llm_filter', {}).get('enabled', False):
                     before = len(filtered_news)
+                    # 低于阈值的新闻：标记为已推送（不进入待推送队列）
+                    below_threshold = [n for n in filtered_news if n.get('llm_relevance', -1) >= 0 and n.get('llm_relevance', 0) < threshold]
+                    if below_threshold:
+                        self.mark_as_pushed(below_threshold)
+                        logger.info(f"LLM筛选：{len(below_threshold)} 条低分新闻标记为主题无关")
                     filtered_news = [n for n in filtered_news if n.get('llm_relevance', -1) < 0 or n.get('llm_relevance', 0) >= threshold]
                     logger.info(f"LLM阈值筛选: {before} -> {len(filtered_news)} 条 (阈值: {threshold})")
 
