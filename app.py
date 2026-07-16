@@ -701,7 +701,7 @@ class NewsMonitor:
                     'name': '美中贸易全国委员会（USCBC）',
                     'url': 'https://www.uschina.org/research-analysis/',
                     'site_type': 'html',
-                    'title_selector': 'h3 a',
+                    'title_selector': 'article a[href*="/articles/"]',
                     'date_selector': 'time',
                     'date_format': '%Y-%m-%d',
                     'enabled': True
