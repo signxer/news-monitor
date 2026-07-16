@@ -1684,9 +1684,10 @@ class NewsMonitor:
         try:
             logger.info(f"开始抓取API {site_config['name']}")
             resp = requests.get(site_config['url'], timeout=30, headers={
-                'User-Agent': 'Mozilla/5.0 (compatible; NewsMonitor/1.0)',
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/javascript, */*; q=0.01',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Referer': site_config.get('url', '').split('?')[0]
             })
             resp.raise_for_status()
             data = resp.json()
@@ -1694,8 +1695,10 @@ class NewsMonitor:
             # 支持 {items: [...]} 和 [...] 两种格式
             items = data.get('items', data) if isinstance(data, dict) else data
             if not isinstance(items, list):
-                logger.warning(f"API {site_config['name']} 返回格式异常")
+                logger.warning(f"API {site_config['name']} 返回格式异常，内容: {resp.text[:200]}")
                 return []
+
+            logger.debug(f"API {site_config['name']} 返回 {len(items)} 条")
 
             news_items = []
             base_url = site_config.get('base_url', '')
