@@ -694,6 +694,24 @@ class NewsMonitor:
                     'date_selector': '',
                     'date_format': '%Y-%m-%d',
                     'enabled': False
+                },
+                {
+                    'name': '日本野村综合研究所（NRI）',
+                    'url': 'https://www.nri.com/jp/knowledge/index.html',
+                    'site_type': 'html',
+                    'title_selector': 'h3.--title',
+                    'date_selector': 'time.--date',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '中国美国商会（AmCham China）',
+                    'url': 'https://www.amchamchina.org/news/',
+                    'site_type': 'html',
+                    'title_selector': 'h2.sp-pcp-title a',
+                    'date_selector': '.sp-pcp-post-meta .sps-meta-type-date',
+                    'date_format': '%B %-d, %Y',
+                    'enabled': True
                 }
             ]
         }
