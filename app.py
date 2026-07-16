@@ -64,6 +64,7 @@ class NewsMonitor:
             'check_interval': 60,  # 检查间隔（分钟）
             'concurrent_workers': 5,  # 并发检查数量
             'date_filter_days': 0,  # 日期过滤天数，0=不过滤，N=只抓取最近N天的新闻
+            'headless': False,  # Chrome无头模式，False=有头模式（更接近真实浏览器）
             'notification': {
                 'bark_urls': [],  # 支持多个Bark地址
                 'serverchan_keys': [],  # 支持多个Server酱密钥
@@ -974,7 +975,14 @@ class NewsMonitor:
     def create_webdriver(self):
         """创建Chrome WebDriver（使用 webdriver-manager 自动管理驱动）"""
         chrome_options = Options()
-        chrome_options.add_argument('--headless=new')
+
+        # 无头模式：可通过配置 headless: true/false 控制
+        if self.config.get('headless', False):
+            chrome_options.add_argument('--headless=new')
+            logger.debug("Chrome 以无头模式运行")
+        else:
+            logger.debug("Chrome 以有头模式运行（更接近真实浏览器）")
+
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window-size=1920,1080')
