@@ -1838,12 +1838,16 @@ class NewsMonitor:
                 if title_prefix == '定时新闻汇总':
                     # 定时推送模式：构建完整列表，按4KB分片发送
                     try:
-                        # 构建每条新闻的内容（带URL）
+                        # 构建每条新闻的内容（带URL，同时显示翻译和原文标题）
                         item_lines = []
                         for i, news in enumerate(new_news_list, 1):
-                            t = news.get('translated_title') or news.get('title', '')
+                            title = news.get('title', '')
+                            translated = news.get('translated_title', '')
                             u = news.get('url', '')
-                            line = f"{i}. {t}"
+                            if translated and translated != title:
+                                line = f"{i}. {translated}\n   {title}"
+                            else:
+                                line = f"{i}. {title}"
                             if u:
                                 line += f"\n   {u}"
                             item_lines.append(line)
@@ -1897,10 +1901,10 @@ class NewsMonitor:
                             url = news.get('url', '')
 
                             push_title = f"📰 {site_name}"
-                            content_lines = [f"{title}"]
                             if translated_title and translated_title != title:
-                                content_lines.append(f"{translated_title}")
-                            push_content = "\n".join(content_lines)
+                                push_content = f"{translated_title}\n{title}"
+                            else:
+                                push_content = title
 
                             payload = {
                                 "title": push_title,
