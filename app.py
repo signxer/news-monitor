@@ -1683,7 +1683,31 @@ class NewsMonitor:
             return self.scrape_rss_site(site_config)
         else:
             return self.scrape_html_site(site_config)
-    
+
+    def filter_existing_news(self, news_items):
+        """过滤掉数据库中已存在的新闻，避免重复打分"""
+        if not news_items:
+            return []
+
+        conn = sqlite3.connect(str(get_db_path()))
+        cursor = conn.cursor()
+
+        # 批量查询已存在的新闻（按 site_name + title + url 去重）
+        existing = set()
+        for item in news_items:
+            cursor.execute(
+                'SELECT 1 FROM news WHERE site_name=? AND title=? AND url=?',
+                (item['site_name'], item['title'], item['url'])
+            )
+            if cursor.fetchone():
+                existing.add((item['site_name'], item['title'], item['url']))
+
+        conn.close()
+
+        filtered = [item for item in news_items
+                    if (item['site_name'], item['title'], item['url']) not in existing]
+        return filtered
+
     def save_news(self, news_items):
         """保存新闻到数据库"""
         if not news_items:
@@ -2226,11 +2250,19 @@ class NewsMonitor:
                         self.update_site_stats(site_name, False, 0, str(e), response_time)
                         logger.error(f"检查站点 {site_name} 失败: {str(e)}")
 
-            # LLM前置打分（在保存之前，分数会写入 item 字典）
+            # 过滤已存在的新闻（避免重复打分和保存）
+            if all_news:
+                before_count = len(all_news)
+                all_news = self.filter_existing_news(all_news)
+                dup_count = before_count - len(all_news)
+                if dup_count > 0:
+                    logger.info(f"跳过 {dup_count} 条已存在的新闻")
+
+            # LLM前置打分（仅对新新闻打分）
             if all_news and self.config.get('llm_filter', {}).get('enabled', False):
                 self.scrape_progress['status'] = 'scoring'
                 self.scrape_progress['current_site'] = 'LLM大模型打分中...'
-                logger.info(f"开始LLM前置打分，共 {len(all_news)} 条新闻")
+                logger.info(f"开始LLM前置打分，共 {len(all_news)} 条新新闻")
                 all_news = self.llm_score_news(all_news)
                 logger.info(f"LLM打分完成")
 
