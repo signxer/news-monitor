@@ -152,11 +152,12 @@ class NewsMonitor:
                 },
                 {
                     'name': '亚太经合组织',
-                    'url': 'https://www.apec.org/publications/listings?keyword=&publicationTitle=&publicationNumber=&group=&publicationType=&dateFrom=&dateTo=&page=1',
-                    'site_type': 'html',
-                    'title_selector': 'div.eyd-card-publication__text > h3',
-                    'date_selector': 'span.eyd-card-publication__date > span.eyd-card-publication__meta__text',
-                    'date_format': '%Y-%m-%d',
+                    'url': 'https://www.apec.org/apecapi/publication/getpublications?keyword=&type=&fromDate=&toDate=&sort=&page=1',
+                    'site_type': 'api',
+                    'base_url': 'https://www.apec.org',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%B %Y',
                     'enabled': True
                 },
                 {
@@ -1675,12 +1676,76 @@ class NewsMonitor:
                 logger.debug(f"关闭 {site_config['name']} 的WebDriver")
                 driver.quit()
     
+    def scrape_api_site(self, site_config):
+        """通过JSON API抓取新闻"""
+        if not site_config.get('enabled', True):
+            return []
+
+        try:
+            logger.info(f"开始抓取API {site_config['name']}")
+            resp = requests.get(site_config['url'], timeout=30, headers={
+                'User-Agent': 'Mozilla/5.0 (compatible; NewsMonitor/1.0)',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            })
+            resp.raise_for_status()
+            data = resp.json()
+
+            # 支持 {items: [...]} 和 [...] 两种格式
+            items = data.get('items', data) if isinstance(data, dict) else data
+            if not isinstance(items, list):
+                logger.warning(f"API {site_config['name']} 返回格式异常")
+                return []
+
+            news_items = []
+            base_url = site_config.get('base_url', '')
+
+            for item in items[:10]:  # 限制前10条
+                title = item.get('title', '').strip()
+                if not title:
+                    continue
+
+                url = item.get('url', '')
+                if url and not url.startswith('http'):
+                    url = base_url + url
+
+                # 日期处理
+                date_str = item.get('date', '')
+                date_format = site_config.get('date_format', '')
+                parsed_date = self.parse_date_string(date_str, date_format or None)
+                if parsed_date:
+                    date_str = parsed_date.strftime('%Y-%m-%d')
+                else:
+                    date_str = datetime.now().strftime('%Y-%m-%d')
+
+                # 日期过滤
+                if not self.is_within_date_filter(date_str, date_format or None):
+                    continue
+
+                translated_title = self.translate_text(title)
+                news_items.append({
+                    'site_name': site_config['name'],
+                    'title': title,
+                    'translated_title': translated_title,
+                    'url': url,
+                    'date': date_str
+                })
+
+            logger.info(f"从API {site_config['name']} 获取到 {len(news_items)} 条新闻")
+            return news_items
+
+        except Exception as e:
+            logger.error(f"抓取API {site_config['name']} 失败: {str(e)}")
+            return []
+
     def scrape_news_site(self, site_config):
         """抓取新闻网站（自动判断类型）"""
         site_type = site_config.get('site_type', 'html').lower()
-        
+
         if site_type == 'rss':
             return self.scrape_rss_site(site_config)
+        elif site_type == 'api':
+            return self.scrape_api_site(site_config)
         else:
             return self.scrape_html_site(site_config)
 
