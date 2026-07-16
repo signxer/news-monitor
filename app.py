@@ -1358,7 +1358,7 @@ class NewsMonitor:
             news_items = []
             
             # 获取RSS条目
-            for entry in feed.entries[:10]:  # 限制获取前10条
+            for entry in feed.entries:
                 title = entry.get('title', '').strip()
                 if not title:
                     continue
@@ -1566,7 +1566,7 @@ class NewsMonitor:
                         tag_counts[tag_name] = tag_counts.get(tag_name, 0) + 1
                     logger.debug(f"页面标题标签统计: {tag_counts}")
             
-            for i, element in enumerate(title_elements[:10]):  # 限制获取前10条
+            for i, element in enumerate(title_elements):
                 logger.debug(f"处理第 {i+1} 个标题元素")
                 title = element.get_text().strip()
                 if not title or len(title) < 10:
@@ -1713,7 +1713,7 @@ class NewsMonitor:
             news_items = []
             base_url = site_config.get('base_url', '')
 
-            for item in items[:10]:  # 限制前10条
+            for item in items:
                 title = item.get('title', '').strip()
                 if not title:
                     continue
