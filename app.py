@@ -441,8 +441,53 @@ class NewsMonitor:
                     'enabled': True
                 },
                 {
-                    'name': '美国国会',
-                    'url': 'https://www.govinfo.gov/rss/bills.xml',
+                    'name': '美国国会-通知',
+                    'url': 'https://www.congress.gov/rss/notification.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国会-法律博客',
+                    'url': 'https://blogs.loc.gov/law/feed/',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国会-送交总统',
+                    'url': 'https://www.congress.gov/rss/presented-to-president.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国会-众议院',
+                    'url': 'https://www.congress.gov/rss/house-floor-today.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国会-参议院',
+                    'url': 'https://www.congress.gov/rss/senate-floor-today.xml',
+                    'site_type': 'rss',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%Y-%m-%d',
+                    'enabled': True
+                },
+                {
+                    'name': '美国国会-热门法案',
+                    'url': 'https://www.congress.gov/rss/most-viewed-bills.xml',
                     'site_type': 'rss',
                     'title_selector': '',
                     'date_selector': '',
