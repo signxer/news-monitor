@@ -986,10 +986,19 @@ class NewsMonitor:
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--window-size=1920,1080')
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_argument('--disable-infobars')
+        chrome_options.add_argument('--disable-extensions')
+        chrome_options.add_argument('--disable-popup-blocking')
+        chrome_options.add_argument('--disable-gpu')
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
+        # 禁用 CDP 的 WebDriver 检测标志
+        chrome_options.add_experimental_option("prefs", {
+            "credentials_enable_service": False,
+            "profile.password_manager_enabled": False,
+        })
 
         # 优先使用 webdriver-manager 自动下载匹配的驱动
         try:
@@ -1016,7 +1025,34 @@ class NewsMonitor:
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(60)
         driver.set_script_timeout(30)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+        # 综合反检测：通过 CDP 协议在页面加载前注入
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': '''
+                // 隐藏 webdriver 标志
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                // 伪装 plugins
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                // 伪装 languages
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+                // 隐藏 Chrome 自动化标志
+                window.chrome = { runtime: {} };
+                // 绕过 permissions 检测
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+                );
+                // 隐藏 WebGL 渲染器信息
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) return 'Intel Inc.';
+                    if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+                    return getParameter.apply(this, arguments);
+                };
+            '''
+        })
         return driver
     
     def translate_text(self, text):
