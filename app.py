@@ -161,6 +161,16 @@ class NewsMonitor:
                     'enabled': True
                 },
                 {
+                    'name': '亚太经合组织-新闻',
+                    'url': 'https://www.apec.org/apecapi/article/getarticleswithfilters?listingType=749e45d0-485d-4283-883a-e94445934bf9%7C9c4616f2-d623-42a1-8755-e01269234bb1%7Ce270d054-e65c-4dd6-9b81-7a807e9862d8%7C1f82ea4b-ec75-4581-a7b5-d53dd7ef3592%7C99f65abc-265b-4b1f-a296-b10a93d76f64%7C0052e8e7-9448-4751-8c7b-978a8237fa35&year=&keyword=&page=1',
+                    'site_type': 'api',
+                    'base_url': 'https://www.apec.org',
+                    'title_selector': '',
+                    'date_selector': '',
+                    'date_format': '%B %d, %Y',
+                    'enabled': True
+                },
+                {
                     'name': '美联储-feds',
                     'url': 'https://www.federalreserve.gov/feeds/feds.xml',
                     'site_type': 'rss',
