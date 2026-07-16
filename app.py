@@ -993,12 +993,17 @@ class NewsMonitor:
             actual_driver = driver_dir / 'chromedriver'
             if actual_driver.exists() and actual_driver.is_file():
                 driver_path = str(actual_driver)
+                # 确保有执行权限
+                import stat
+                if not (actual_driver.stat().st_mode & stat.S_IXUSR):
+                    actual_driver.chmod(actual_driver.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                    logger.info(f"已修复 chromedriver 执行权限: {driver_path}")
             service = Service(driver_path)
-            logger.info("使用 webdriver-manager 自动管理 ChromeDriver")
-        except Exception:
+            logger.info(f"使用 webdriver-manager 自动管理 ChromeDriver: {driver_path}")
+        except Exception as e:
             # fallback: 使用系统 PATH 中的 chromedriver
             service = Service()
-            logger.info("使用系统 PATH 中的 ChromeDriver")
+            logger.info(f"使用系统 PATH 中的 ChromeDriver (webdriver-manager 失败: {e})")
 
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.set_page_load_timeout(60)
