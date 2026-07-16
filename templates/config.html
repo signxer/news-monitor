@@ -27,7 +27,7 @@
             </div>
             <div class="card-body">
                 <div class="row">
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="mb-3">
                             <label for="check-interval" class="form-label fw-semibold">
                                 <i class="bi bi-clock text-info me-1"></i>
@@ -37,7 +37,7 @@
                             <div class="form-text">设置自动检查新闻的时间间隔</div>
                         </div>
                     </div>
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <div class="mb-3">
                             <label for="date-filter-days" class="form-label fw-semibold">
                                 <i class="bi bi-calendar-range text-warning me-1"></i>
@@ -45,6 +45,21 @@
                             </label>
                             <input type="number" class="form-control" id="date-filter-days" min="0" max="365" value="{{ config.get('date_filter_days', 0) }}">
                             <div class="form-text">只抓取最近 N 天内的新闻，0 表示不过滤（默认）</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">
+                                <i class="bi bi-display text-secondary me-1"></i>
+                                浏览器模式
+                            </label>
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" id="headless-mode" {{ 'checked' if config.get('headless', false) else '' }}>
+                                <label class="form-check-label" for="headless-mode">
+                                    无头模式（后台运行，不显示浏览器窗口）
+                                </label>
+                            </div>
+                            <div class="form-text">关闭可模拟真实浏览器环境，减少反爬检测</div>
                         </div>
                     </div>
                 </div>
@@ -1177,6 +1192,7 @@
         // 基本设置
         config.check_interval = parseInt(document.getElementById('check-interval').value);
         config.date_filter_days = parseInt(document.getElementById('date-filter-days').value) || 0;
+        config.headless = document.getElementById('headless-mode').checked;
 
         // 推送模式设置
         if (!config.push) config.push = {};
