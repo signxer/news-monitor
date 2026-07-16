@@ -1569,8 +1569,8 @@ class NewsMonitor:
             for i, element in enumerate(title_elements[:10]):  # 限制获取前10条
                 logger.debug(f"处理第 {i+1} 个标题元素")
                 title = element.get_text().strip()
-                if not title:
-                    logger.debug(f"第 {i+1} 个元素标题为空，跳过")
+                if not title or len(title) < 10:
+                    logger.debug(f"第 {i+1} 个元素标题过短或为空（{len(title)}字符），跳过: {title}")
                     continue
                 
                 logger.debug(f"提取到标题: {title[:50]}{'...' if len(title) > 50 else ''}")
