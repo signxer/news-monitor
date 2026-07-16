@@ -986,7 +986,14 @@ class NewsMonitor:
         # 优先使用 webdriver-manager 自动下载匹配的驱动
         try:
             from webdriver_manager.chrome import ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
+            driver_path = ChromeDriverManager().install()
+            # 修正：webdriver-manager 可能返回错误文件（如 THIRD_PARTY_NOTICES），确保指向真正的 chromedriver
+            import pathlib
+            driver_dir = pathlib.Path(driver_path).parent
+            actual_driver = driver_dir / 'chromedriver'
+            if actual_driver.exists() and actual_driver.is_file():
+                driver_path = str(actual_driver)
+            service = Service(driver_path)
             logger.info("使用 webdriver-manager 自动管理 ChromeDriver")
         except Exception:
             # fallback: 使用系统 PATH 中的 chromedriver
